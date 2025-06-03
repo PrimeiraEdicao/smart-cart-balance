@@ -1,31 +1,17 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Plus, Edit, Camera, Barcode, Users } from "lucide-react";
+import { ArrowLeft, Plus, Barcode, Users, PiggyBank } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
 import { ScanAddDialog } from "@/components/ScanAddDialog";
 import { AddMemberDialog } from "@/components/AddMemberDialog";
 import { ItemCommentsDialog } from "@/components/ItemCommentsDialog";
-
-export interface ListItem {
-  id: string;
-  name: string;
-  quantity: number;
-  purchased: boolean;
-  price?: number;
-  addedBy?: string;
-  comments?: Comment[];
-}
-
-export interface Comment {
-  id: string;
-  text: string;
-  author: string;
-  timestamp: Date;
-}
+import { CategoryBudgetDialog } from "@/components/CategoryBudgetDialog";
+import { CategorySpendingCard } from "@/components/CategorySpendingCard";
+import { ListItem, Comment } from "@/types/shopping";
+import { defaultCategories } from "@/data/categories";
 
 const Lista = () => {
   const navigate = useNavigate();
@@ -34,22 +20,60 @@ const Lista = () => {
   const [showScanDialog, setShowScanDialog] = useState(false);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
   const [showCommentsDialog, setShowCommentsDialog] = useState(false);
+  const [showBudgetDialog, setShowBudgetDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  
   const [items, setItems] = useState<ListItem[]>([
-    { id: '1', name: 'Arroz', quantity: 2, purchased: false, addedBy: 'você' },
-    { id: '2', name: 'Feijão', quantity: 1, purchased: false, addedBy: 'João' },
-    { id: '3', name: 'Açúcar', quantity: 1, purchased: true, price: 4.50, addedBy: 'você' },
-    { id: '4', name: 'Leite', quantity: 3, purchased: false, addedBy: 'Maria' },
+    { 
+      id: '1', 
+      name: 'Arroz', 
+      quantity: 2, 
+      purchased: false, 
+      addedBy: 'você',
+      categoryId: 'grains-cereals'
+    },
+    { 
+      id: '2', 
+      name: 'Feijão', 
+      quantity: 1, 
+      purchased: false, 
+      addedBy: 'João',
+      categoryId: 'grains-cereals'
+    },
+    { 
+      id: '3', 
+      name: 'Açúcar', 
+      quantity: 1, 
+      purchased: true, 
+      price: 4.50, 
+      addedBy: 'você',
+      categoryId: 'grains-cereals',
+      purchaseDate: new Date()
+    },
+    { 
+      id: '4', 
+      name: 'Leite', 
+      quantity: 3, 
+      purchased: false, 
+      addedBy: 'Maria',
+      categoryId: 'dairy'
+    },
   ]);
 
-  const addItem = (name: string, quantity: number) => {
+  const [categoryBudgets, setCategoryBudgets] = useState<{ categoryId: string; budget: number }[]>([
+    { categoryId: 'dairy', budget: 50.00 },
+    { categoryId: 'grains-cereals', budget: 80.00 }
+  ]);
+
+  const addItem = (name: string, quantity: number, categoryId?: string) => {
     const newItem: ListItem = {
       id: Date.now().toString(),
       name,
       quantity,
       purchased: false,
       addedBy: 'você',
+      categoryId,
     };
     setItems([...items, newItem]);
   };
@@ -80,6 +104,18 @@ const Lista = () => {
       }
       return item;
     }));
+  };
+
+  const getCategoryName = (categoryId?: string) => {
+    if (!categoryId) return null;
+    const category = defaultCategories.find(c => c.id === categoryId);
+    return category ? category.name : null;
+  };
+
+  const getCategoryColor = (categoryId?: string) => {
+    if (!categoryId) return 'bg-gray-200';
+    const category = defaultCategories.find(c => c.id === categoryId);
+    return category ? category.color : 'bg-gray-200';
   };
 
   const handleItemLongPress = (item: ListItem) => {
@@ -131,6 +167,14 @@ const Lista = () => {
             <Button 
               variant="ghost" 
               size="icon" 
+              onClick={() => setShowBudgetDialog(true)}
+              className="text-green-600 hover:bg-green-50"
+            >
+              <PiggyBank className="h-5 w-5" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
               onClick={() => setShowAddMemberDialog(true)}
               className="text-purple-600 hover:bg-purple-50"
             >
@@ -148,7 +192,6 @@ const Lista = () => {
         </div>
       </div>
 
-      
       <div className="max-w-md mx-auto px-4 py-6">
         {/* Balance Info */}
         <Card className="mb-6 bg-gradient-to-r from-green-600 to-emerald-600 text-white border-0">
@@ -158,6 +201,9 @@ const Lista = () => {
             <div className="text-sm text-green-100">do seu orçamento</div>
           </CardContent>
         </Card>
+
+        {/* Category Spending */}
+        <CategorySpendingCard items={items} categoryBudgets={categoryBudgets} />
 
         {/* Items List */}
         <div className="space-y-3">
@@ -177,8 +223,13 @@ const Lista = () => {
               <CardContent className="p-4">
                 <div className="flex justify-between items-center">
                   <div className="flex-1">
-                    <div className={`font-medium ${item.purchased ? 'text-green-800 line-through' : 'text-gray-800'}`}>
-                      {item.name}
+                    <div className="flex items-center space-x-2 mb-1">
+                      <div className={`font-medium ${item.purchased ? 'text-green-800 line-through' : 'text-gray-800'}`}>
+                        {item.name}
+                      </div>
+                      {item.categoryId && (
+                        <div className={`w-2 h-2 rounded-full ${getCategoryColor(item.categoryId)}`} />
+                      )}
                     </div>
                     <div className="text-sm text-gray-500">
                       Quantidade: {item.quantity}
@@ -188,6 +239,11 @@ const Lista = () => {
                         </span>
                       )}
                     </div>
+                    {item.categoryId && (
+                      <div className="text-xs text-gray-400 mt-1">
+                        {getCategoryName(item.categoryId)}
+                      </div>
+                    )}
                     <div className="text-xs text-purple-600 mt-1">
                       Adicionado por {item.addedBy}
                     </div>
@@ -259,6 +315,13 @@ const Lista = () => {
           onAddComment={addComment}
         />
       )}
+
+      <CategoryBudgetDialog
+        open={showBudgetDialog}
+        onOpenChange={setShowBudgetDialog}
+        categoryBudgets={categoryBudgets}
+        onUpdateBudgets={setCategoryBudgets}
+      />
     </div>
   );
 };

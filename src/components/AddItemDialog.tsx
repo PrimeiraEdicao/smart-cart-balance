@@ -3,17 +3,19 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { defaultCategories } from "@/data/categories";
 
 interface AddItemDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddItem: (name: string, quantity: number) => void;
+  onAddItem: (name: string, quantity: number, categoryId?: string) => void;
 }
 
 const commonItems = [
@@ -24,6 +26,7 @@ const commonItems = [
 export const AddItemDialog = ({ open, onOpenChange, onAddItem }: AddItemDialogProps) => {
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [categoryId, setCategoryId] = useState<string>("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
   const handleNameChange = (value: string) => {
@@ -40,9 +43,10 @@ export const AddItemDialog = ({ open, onOpenChange, onAddItem }: AddItemDialogPr
 
   const handleSubmit = () => {
     if (name && quantity) {
-      onAddItem(name, parseInt(quantity));
+      onAddItem(name, parseInt(quantity), categoryId || undefined);
       setName("");
       setQuantity("");
+      setCategoryId("");
       setSuggestions([]);
       onOpenChange(false);
     }
@@ -83,6 +87,25 @@ export const AddItemDialog = ({ open, onOpenChange, onAddItem }: AddItemDialogPr
                 ))}
               </div>
             )}
+          </div>
+
+          <div>
+            <Label htmlFor="category">Categoria</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Selecione uma categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                {defaultCategories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-3 h-3 rounded-full ${category.color}`} />
+                      <span>{category.name}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           
           <div>
