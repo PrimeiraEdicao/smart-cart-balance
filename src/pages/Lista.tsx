@@ -1,11 +1,14 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Plus, Edit, Camera, Barcode } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Camera, Barcode, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
 import { ScanAddDialog } from "@/components/ScanAddDialog";
+import { AddMemberDialog } from "@/components/AddMemberDialog";
+import { ItemCommentsDialog } from "@/components/ItemCommentsDialog";
 
 export interface ListItem {
   id: string;
@@ -13,6 +16,15 @@ export interface ListItem {
   quantity: number;
   purchased: boolean;
   price?: number;
+  addedBy?: string;
+  comments?: Comment[];
+}
+
+export interface Comment {
+  id: string;
+  text: string;
+  author: string;
+  timestamp: Date;
 }
 
 const Lista = () => {
@@ -20,12 +32,15 @@ const Lista = () => {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [showScanDialog, setShowScanDialog] = useState(false);
+  const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
+  const [showCommentsDialog, setShowCommentsDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
   const [items, setItems] = useState<ListItem[]>([
-    { id: '1', name: 'Arroz', quantity: 2, purchased: false },
-    { id: '2', name: 'Feijão', quantity: 1, purchased: false },
-    { id: '3', name: 'Açúcar', quantity: 1, purchased: true, price: 4.50 },
-    { id: '4', name: 'Leite', quantity: 3, purchased: false },
+    { id: '1', name: 'Arroz', quantity: 2, purchased: false, addedBy: 'você' },
+    { id: '2', name: 'Feijão', quantity: 1, purchased: false, addedBy: 'João' },
+    { id: '3', name: 'Açúcar', quantity: 1, purchased: true, price: 4.50, addedBy: 'você' },
+    { id: '4', name: 'Leite', quantity: 3, purchased: false, addedBy: 'Maria' },
   ]);
 
   const addItem = (name: string, quantity: number) => {
@@ -34,6 +49,7 @@ const Lista = () => {
       name,
       quantity,
       purchased: false,
+      addedBy: 'você',
     };
     setItems([...items, newItem]);
   };
@@ -46,6 +62,52 @@ const Lista = () => {
 
   const deleteItem = (id: string) => {
     setItems(items.filter(item => item.id !== id));
+  };
+
+  const addComment = (itemId: string, text: string) => {
+    setItems(items.map(item => {
+      if (item.id === itemId) {
+        const newComment: Comment = {
+          id: Date.now().toString(),
+          text,
+          author: 'você',
+          timestamp: new Date(),
+        };
+        return {
+          ...item,
+          comments: [...(item.comments || []), newComment]
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleItemLongPress = (item: ListItem) => {
+    setSelectedItem(item);
+    setShowCommentsDialog(true);
+  };
+
+  const handleMouseDown = (item: ListItem) => {
+    const timer = setTimeout(() => {
+      handleItemLongPress(item);
+    }, 500);
+    setLongPressTimer(timer);
+  };
+
+  const handleMouseUp = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+  };
+
+  const handleItemClick = (item: ListItem) => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    setSelectedItem(item);
+    setShowActionDialog(true);
   };
 
   const totalSpent = items
@@ -65,14 +127,24 @@ const Lista = () => {
             </Button>
             <h1 className="text-xl font-bold text-gray-800">Lista de Compras</h1>
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setShowScanDialog(true)}
-            className="text-blue-600 hover:bg-blue-50"
-          >
-            <Barcode className="h-5 w-5" />
-          </Button>
+          <div className="flex space-x-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setShowAddMemberDialog(true)}
+              className="text-purple-600 hover:bg-purple-50"
+            >
+              <Users className="h-5 w-5" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setShowScanDialog(true)}
+              className="text-blue-600 hover:bg-blue-50"
+            >
+              <Barcode className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -95,14 +167,16 @@ const Lista = () => {
               className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
                 item.purchased ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
               }`}
-              onClick={() => {
-                setSelectedItem(item);
-                setShowActionDialog(true);
-              }}
+              onMouseDown={() => handleMouseDown(item)}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={() => handleMouseDown(item)}
+              onTouchEnd={handleMouseUp}
+              onClick={() => handleItemClick(item)}
             >
               <CardContent className="p-4">
                 <div className="flex justify-between items-center">
-                  <div>
+                  <div className="flex-1">
                     <div className={`font-medium ${item.purchased ? 'text-green-800 line-through' : 'text-gray-800'}`}>
                       {item.name}
                     </div>
@@ -114,6 +188,14 @@ const Lista = () => {
                         </span>
                       )}
                     </div>
+                    <div className="text-xs text-purple-600 mt-1">
+                      Adicionado por {item.addedBy}
+                    </div>
+                    {item.comments && item.comments.length > 0 && (
+                      <div className="text-xs text-blue-600 mt-1">
+                        💬 {item.comments.length} comentário(s)
+                      </div>
+                    )}
                   </div>
                   {item.purchased && (
                     <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
@@ -163,6 +245,20 @@ const Lista = () => {
         onOpenChange={setShowScanDialog}
         onAddItem={addItem}
       />
+
+      <AddMemberDialog
+        open={showAddMemberDialog}
+        onOpenChange={setShowAddMemberDialog}
+      />
+
+      {selectedItem && (
+        <ItemCommentsDialog
+          open={showCommentsDialog}
+          onOpenChange={setShowCommentsDialog}
+          item={selectedItem}
+          onAddComment={addComment}
+        />
+      )}
     </div>
   );
 };
