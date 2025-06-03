@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Eye, EyeOff, User, List, ShoppingCart, Plus } from "lucide-react";
+import { Eye, EyeOff, User, List, ShoppingCart, Plus, FileDown, History } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Index = () => {
@@ -10,15 +10,41 @@ const Index = () => {
   const [balance] = useState(500.00); // Saldo inicial
   const navigate = useNavigate();
 
+  const handleImportList = () => {
+    // Simula seleção de arquivo
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.csv';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        console.log('Arquivo selecionado:', file.name);
+        // Aqui seria implementada a lógica de importação
+        alert('Lista importada com sucesso!');
+      }
+    };
+    input.click();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-md mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-800">Meu Orçamento</h1>
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <User className="h-5 w-5" />
-          </Button>
+          <div className="flex space-x-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="rounded-full"
+              onClick={() => navigate('/historico')}
+            >
+              <History className="h-5 w-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="rounded-full">
+              <User className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -71,6 +97,21 @@ const Index = () => {
               <div className="text-left">
                 <div className="font-semibold text-lg">Realizar Compra</div>
                 <div className="text-sm text-gray-500">Modo rápido com código de barras</div>
+              </div>
+            </div>
+          </Button>
+
+          <Button
+            className="w-full h-16 bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 shadow-md transition-all duration-200 hover:shadow-lg"
+            onClick={handleImportList}
+          >
+            <div className="flex items-center space-x-4">
+              <div className="bg-purple-100 p-3 rounded-full">
+                <FileDown className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="text-left">
+                <div className="font-semibold text-lg">Importar Lista</div>
+                <div className="text-sm text-gray-500">Carregue uma lista existente</div>
               </div>
             </div>
           </Button>

@@ -1,11 +1,11 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Plus, Edit, Camera } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Camera, BarCode3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
+import { ScanAddDialog } from "@/components/ScanAddDialog";
 
 export interface ListItem {
   id: string;
@@ -19,6 +19,7 @@ const Lista = () => {
   const navigate = useNavigate();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showActionDialog, setShowActionDialog] = useState(false);
+  const [showScanDialog, setShowScanDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
   const [items, setItems] = useState<ListItem[]>([
     { id: '1', name: 'Arroz', quantity: 2, purchased: false },
@@ -57,14 +58,25 @@ const Lista = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
-        <div className="max-w-md mx-auto px-4 py-4 flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
-            <ArrowLeft className="h-5 w-5" />
+        <div className="max-w-md mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-xl font-bold text-gray-800">Lista de Compras</h1>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setShowScanDialog(true)}
+            className="text-blue-600 hover:bg-blue-50"
+          >
+            <BarCode3 className="h-5 w-5" />
           </Button>
-          <h1 className="text-xl font-bold text-gray-800">Lista de Compras</h1>
         </div>
       </div>
 
+      
       <div className="max-w-md mx-auto px-4 py-6">
         {/* Balance Info */}
         <Card className="mb-6 bg-gradient-to-r from-green-600 to-emerald-600 text-white border-0">
@@ -145,6 +157,12 @@ const Lista = () => {
           onDeleteItem={deleteItem}
         />
       )}
+
+      <ScanAddDialog
+        open={showScanDialog}
+        onOpenChange={setShowScanDialog}
+        onAddItem={addItem}
+      />
     </div>
   );
 };
