@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Edit, Camera, Trash2 } from "lucide-react";
-import { ListItem } from "@/pages/Lista";
+import { ListItem } from "@/types/shopping";
 import { BarcodeDialog } from "./BarcodeDialog";
 
 interface ItemActionDialogProps {
