@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Plus, Edit, Camera, BarCode3 } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Camera, Barcode } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
@@ -71,7 +71,7 @@ const Lista = () => {
             onClick={() => setShowScanDialog(true)}
             className="text-blue-600 hover:bg-blue-50"
           >
-            <BarCode3 className="h-5 w-5" />
+            <Barcode className="h-5 w-5" />
           </Button>
         </div>
       </div>
