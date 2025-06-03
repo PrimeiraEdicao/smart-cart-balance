@@ -17,6 +17,10 @@ export interface ListItem {
   categoryId?: string;
   purchaseDate?: Date;
   priceHistory?: PriceEntry[];
+  assignedTo?: string;
+  claimedBy?: string;
+  group?: string;
+  order?: number;
 }
 
 export interface Comment {
@@ -37,6 +41,7 @@ export interface ListTemplate {
   name: string;
   items: Omit<ListItem, 'id' | 'purchased' | 'price' | 'purchaseDate'>[];
   description?: string;
+  categoryBudgets?: { categoryId: string; budget: number }[];
 }
 
 export interface ShoppingList {
@@ -47,4 +52,34 @@ export interface ShoppingList {
   categoryBudgets: { categoryId: string; budget: number }[];
   createdAt: Date;
   updatedAt: Date;
+  members?: ListMember[];
+  isShared?: boolean;
+}
+
+export interface ListMember {
+  id: string;
+  name: string;
+  email: string;
+  role: 'owner' | 'member';
+  joinedAt: Date;
+}
+
+export interface Notification {
+  id: string;
+  type: 'item_added' | 'item_purchased' | 'item_commented' | 'member_added';
+  message: string;
+  listId: string;
+  itemId?: string;
+  timestamp: Date;
+  read: boolean;
+}
+
+export interface DiscountCoupon {
+  id: string;
+  title: string;
+  description: string;
+  category?: string;
+  expiryDate?: Date;
+  code?: string;
+  discountPercentage?: number;
 }

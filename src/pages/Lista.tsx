@@ -1,7 +1,8 @@
-import { useState } from "react";
+
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Plus, Barcode, Users, PiggyBank } from "lucide-react";
+import { ArrowLeft, Plus, Barcode, Users, PiggyBank, BookTemplate, TrendingUp, GripVertical } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
@@ -10,7 +11,9 @@ import { AddMemberDialog } from "@/components/AddMemberDialog";
 import { ItemCommentsDialog } from "@/components/ItemCommentsDialog";
 import { CategoryBudgetDialog } from "@/components/CategoryBudgetDialog";
 import { CategorySpendingCard } from "@/components/CategorySpendingCard";
-import { ListItem, Comment } from "@/types/shopping";
+import { ListTemplateDialog } from "@/components/ListTemplateDialog";
+import { ItemPriceHistoryDialog } from "@/components/ItemPriceHistoryDialog";
+import { ListItem, Comment, ListTemplate, PriceEntry } from "@/types/shopping";
 import { defaultCategories } from "@/data/categories";
 
 const Lista = () => {
@@ -21,8 +24,12 @@ const Lista = () => {
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
   const [showCommentsDialog, setShowCommentsDialog] = useState(false);
   const [showBudgetDialog, setShowBudgetDialog] = useState(false);
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [showPriceHistoryDialog, setShowPriceHistoryDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [draggedItem, setDraggedItem] = useState<ListItem | null>(null);
+  const [groupBy, setGroupBy] = useState<'none' | 'category' | 'manual'>('none');
   
   const [items, setItems] = useState<ListItem[]>([
     { 
@@ -31,7 +38,12 @@ const Lista = () => {
       quantity: 2, 
       purchased: false, 
       addedBy: 'você',
-      categoryId: 'grains-cereals'
+      categoryId: 'grains-cereals',
+      order: 1,
+      priceHistory: [
+        { price: 4.20, date: new Date('2024-04-01') },
+        { price: 4.50, date: new Date('2024-04-08') }
+      ]
     },
     { 
       id: '2', 
@@ -39,7 +51,9 @@ const Lista = () => {
       quantity: 1, 
       purchased: false, 
       addedBy: 'João',
-      categoryId: 'grains-cereals'
+      categoryId: 'grains-cereals',
+      order: 2,
+      assignedTo: 'João'
     },
     { 
       id: '3', 
@@ -49,7 +63,8 @@ const Lista = () => {
       price: 4.50, 
       addedBy: 'você',
       categoryId: 'grains-cereals',
-      purchaseDate: new Date()
+      purchaseDate: new Date(),
+      order: 3
     },
     { 
       id: '4', 
@@ -57,13 +72,20 @@ const Lista = () => {
       quantity: 3, 
       purchased: false, 
       addedBy: 'Maria',
-      categoryId: 'dairy'
+      categoryId: 'dairy',
+      order: 4,
+      claimedBy: 'Maria'
     },
   ]);
 
   const [categoryBudgets, setCategoryBudgets] = useState<{ categoryId: string; budget: number }[]>([
     { categoryId: 'dairy', budget: 50.00 },
     { categoryId: 'grains-cereals', budget: 80.00 }
+  ]);
+
+  // Smart suggestions based on purchase history
+  const [suggestionHistory] = useState([
+    'Banana', 'Maçã', 'Tomate', 'Cebola', 'Alho', 'Batata', 'Carne', 'Frango'
   ]);
 
   const addItem = (name: string, quantity: number, categoryId?: string) => {
@@ -74,14 +96,32 @@ const Lista = () => {
       purchased: false,
       addedBy: 'você',
       categoryId,
+      order: items.length + 1,
     };
     setItems([...items, newItem]);
   };
 
   const updateItem = (id: string, updates: Partial<ListItem>) => {
-    setItems(items.map(item => 
-      item.id === id ? { ...item, ...updates } : item
-    ));
+    setItems(items.map(item => {
+      if (item.id === id) {
+        // Se está marcando como comprado, adiciona ao histórico de preços
+        if (updates.purchased && updates.price && !item.purchased) {
+          const newPriceEntry: PriceEntry = {
+            price: updates.price,
+            date: new Date(),
+          };
+          const updatedPriceHistory = [...(item.priceHistory || []), newPriceEntry];
+          return { 
+            ...item, 
+            ...updates, 
+            priceHistory: updatedPriceHistory,
+            purchaseDate: new Date()
+          };
+        }
+        return { ...item, ...updates };
+      }
+      return item;
+    }));
   };
 
   const deleteItem = (id: string) => {
@@ -104,6 +144,58 @@ const Lista = () => {
       }
       return item;
     }));
+  };
+
+  const createFromTemplate = (template: ListTemplate) => {
+    const templateItems: ListItem[] = template.items.map((templateItem, index) => ({
+      id: Date.now().toString() + index,
+      ...templateItem,
+      order: index + 1
+    }));
+    setItems(templateItems);
+    if (template.categoryBudgets) {
+      setCategoryBudgets(template.categoryBudgets);
+    }
+  };
+
+  const assignItemToMember = (itemId: string, memberId: string) => {
+    updateItem(itemId, { assignedTo: memberId });
+  };
+
+  const claimItem = (itemId: string, memberId: string) => {
+    updateItem(itemId, { claimedBy: memberId });
+  };
+
+  // Drag and drop functions
+  const handleDragStart = (e: React.DragEvent, item: ListItem) => {
+    setDraggedItem(item);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetItem: ListItem) => {
+    e.preventDefault();
+    if (!draggedItem || draggedItem.id === targetItem.id) return;
+
+    const draggedIndex = items.findIndex(item => item.id === draggedItem.id);
+    const targetIndex = items.findIndex(item => item.id === targetItem.id);
+
+    const newItems = [...items];
+    newItems.splice(draggedIndex, 1);
+    newItems.splice(targetIndex, 0, draggedItem);
+
+    // Update order
+    const updatedItems = newItems.map((item, index) => ({
+      ...item,
+      order: index + 1
+    }));
+
+    setItems(updatedItems);
+    setDraggedItem(null);
   };
 
   const getCategoryName = (categoryId?: string) => {
@@ -146,6 +238,27 @@ const Lista = () => {
     setShowActionDialog(true);
   };
 
+  const handleItemDoubleClick = (item: ListItem) => {
+    setSelectedItem(item);
+    setShowPriceHistoryDialog(true);
+  };
+
+  // Group items
+  const getGroupedItems = () => {
+    if (groupBy === 'category') {
+      const grouped = items.reduce((acc, item) => {
+        const categoryId = item.categoryId || 'other';
+        if (!acc[categoryId]) acc[categoryId] = [];
+        acc[categoryId].push(item);
+        return acc;
+      }, {} as Record<string, ListItem[]>);
+      return grouped;
+    }
+    return { all: items.sort((a, b) => (a.order || 0) - (b.order || 0)) };
+  };
+
+  const groupedItems = getGroupedItems();
+
   const totalSpent = items
     .filter(item => item.purchased && item.price)
     .reduce((sum, item) => sum + (item.price! * item.quantity), 0);
@@ -164,6 +277,14 @@ const Lista = () => {
             <h1 className="text-xl font-bold text-gray-800">Lista de Compras</h1>
           </div>
           <div className="flex space-x-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setShowTemplateDialog(true)}
+              className="text-orange-600 hover:bg-orange-50"
+            >
+              <BookTemplate className="h-5 w-5" />
+            </Button>
             <Button 
               variant="ghost" 
               size="icon" 
@@ -205,62 +326,124 @@ const Lista = () => {
         {/* Category Spending */}
         <CategorySpendingCard items={items} categoryBudgets={categoryBudgets} />
 
+        {/* Grouping Options */}
+        <div className="flex space-x-2 mb-4">
+          <Button
+            variant={groupBy === 'none' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setGroupBy('none')}
+          >
+            Lista
+          </Button>
+          <Button
+            variant={groupBy === 'category' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setGroupBy('category')}
+          >
+            Por Categoria
+          </Button>
+        </div>
+
         {/* Items List */}
-        <div className="space-y-3">
-          {items.map((item) => (
-            <Card 
-              key={item.id} 
-              className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
-                item.purchased ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
-              }`}
-              onMouseDown={() => handleMouseDown(item)}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              onTouchStart={() => handleMouseDown(item)}
-              onTouchEnd={handleMouseUp}
-              onClick={() => handleItemClick(item)}
-            >
-              <CardContent className="p-4">
-                <div className="flex justify-between items-center">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <div className={`font-medium ${item.purchased ? 'text-green-800 line-through' : 'text-gray-800'}`}>
-                        {item.name}
-                      </div>
-                      {item.categoryId && (
-                        <div className={`w-2 h-2 rounded-full ${getCategoryColor(item.categoryId)}`} />
-                      )}
+        <div className="space-y-4">
+          {Object.entries(groupedItems).map(([groupKey, groupItems]) => (
+            <div key={groupKey}>
+              {groupBy === 'category' && groupKey !== 'all' && (
+                <div className="mb-3">
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full ${getCategoryColor(groupKey)}`} />
+                    <div className="font-medium text-gray-700">
+                      {getCategoryName(groupKey) || 'Outros'}
                     </div>
-                    <div className="text-sm text-gray-500">
-                      Quantidade: {item.quantity}
-                      {item.purchased && item.price && (
-                        <span className="ml-2 text-green-600 font-medium">
-                          • R$ {(item.price * item.quantity).toFixed(2)}
-                        </span>
-                      )}
-                    </div>
-                    {item.categoryId && (
-                      <div className="text-xs text-gray-400 mt-1">
-                        {getCategoryName(item.categoryId)}
-                      </div>
-                    )}
-                    <div className="text-xs text-purple-600 mt-1">
-                      Adicionado por {item.addedBy}
-                    </div>
-                    {item.comments && item.comments.length > 0 && (
-                      <div className="text-xs text-blue-600 mt-1">
-                        💬 {item.comments.length} comentário(s)
-                      </div>
-                    )}
+                    <div className="text-sm text-gray-500">({groupItems.length})</div>
                   </div>
-                  {item.purchased && (
-                    <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                      Comprado
-                    </div>
-                  )}
                 </div>
-              </CardContent>
-            </Card>
+              )}
+              
+              <div className="space-y-3">
+                {groupItems.map((item) => (
+                  <Card 
+                    key={item.id} 
+                    className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+                      item.purchased ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
+                    } ${draggedItem?.id === item.id ? 'opacity-50' : ''}`}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, item)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, item)}
+                    onMouseDown={() => handleMouseDown(item)}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    onTouchStart={() => handleMouseDown(item)}
+                    onTouchEnd={handleMouseUp}
+                    onClick={() => handleItemClick(item)}
+                    onDoubleClick={() => handleItemDoubleClick(item)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center space-x-3">
+                        <GripVertical className="h-4 w-4 text-gray-400" />
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <div className={`font-medium ${item.purchased ? 'text-green-800 line-through' : 'text-gray-800'}`}>
+                              {item.name}
+                            </div>
+                            {item.categoryId && (
+                              <div className={`w-2 h-2 rounded-full ${getCategoryColor(item.categoryId)}`} />
+                            )}
+                            {item.priceHistory && item.priceHistory.length > 1 && (
+                              <TrendingUp className="h-3 w-3 text-blue-500" />
+                            )}
+                          </div>
+                          
+                          <div className="text-sm text-gray-500">
+                            Quantidade: {item.quantity}
+                            {item.purchased && item.price && (
+                              <span className="ml-2 text-green-600 font-medium">
+                                • R$ {(item.price * item.quantity).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {item.categoryId && groupBy !== 'category' && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              {getCategoryName(item.categoryId)}
+                            </div>
+                          )}
+                          
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            <div className="text-xs text-purple-600">
+                              Adicionado por {item.addedBy}
+                            </div>
+                            {item.assignedTo && (
+                              <div className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                Atribuído: {item.assignedTo}
+                              </div>
+                            )}
+                            {item.claimedBy && (
+                              <div className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                                Reivindicado: {item.claimedBy}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {item.comments && item.comments.length > 0 && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              💬 {item.comments.length} comentário(s)
+                            </div>
+                          )}
+                        </div>
+                        
+                        {item.purchased && (
+                          <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                            Comprado
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
 
@@ -280,6 +463,7 @@ const Lista = () => {
         <Plus className="h-6 w-6" />
       </Button>
 
+      {/* Dialogs */}
       <AddItemDialog
         open={showAddDialog}
         onOpenChange={setShowAddDialog}
@@ -321,6 +505,19 @@ const Lista = () => {
         onOpenChange={setShowBudgetDialog}
         categoryBudgets={categoryBudgets}
         onUpdateBudgets={setCategoryBudgets}
+      />
+
+      <ListTemplateDialog
+        open={showTemplateDialog}
+        onOpenChange={setShowTemplateDialog}
+        currentItems={items}
+        onCreateFromTemplate={createFromTemplate}
+      />
+
+      <ItemPriceHistoryDialog
+        open={showPriceHistoryDialog}
+        onOpenChange={setShowPriceHistoryDialog}
+        item={selectedItem}
       />
     </div>
   );
