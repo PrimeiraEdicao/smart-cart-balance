@@ -1,7 +1,9 @@
+// capacitor.config.ts
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.222af45c3eb44de5a678c254d7ef338d',
+  // 👇 Mude esta linha
+  appId: 'com.lovable.smartcartbalance', // Exemplo de novo ID válido
   appName: 'smart-cart-balance',
   webDir: 'dist',
   server: {
