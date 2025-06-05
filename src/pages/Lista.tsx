@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -62,6 +61,7 @@ const Lista = () => {
     const templateItems: ListItem[] = template.items.map((templateItem, index) => ({
       id: Date.now().toString() + index,
       ...templateItem,
+      purchased: false, // Add default purchased value
       order: index + 1
     }));
     
