@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { ListItem, Category, ShoppingList, ListTemplate } from '@/types/shopping';
+import { SupabaseService } from '@/services/supabaseService';
 import { v4 as uuidv4 } from 'uuid';
 
 interface ShoppingStore {
@@ -17,21 +18,29 @@ interface ShoppingStore {
   // Categories
   categories: Category[];
   
+  // Loading states
+  isLoading: boolean;
+  
   // Actions
-  createList: (name: string, budget: number) => void;
+  createList: (name: string, budget: number) => Promise<void>;
   updateList: (id: string, updates: Partial<ShoppingList>) => void;
   deleteList: (id: string) => void;
   setCurrentList: (listId: string) => void;
+  loadUserLists: () => Promise<void>;
   
-  addItem: (name: string, quantity: number, categoryId?: string) => void;
-  updateItem: (id: string, updates: Partial<ListItem>) => void;
-  deleteItem: (id: string) => void;
+  addItem: (name: string, quantity: number, categoryId?: string) => Promise<void>;
+  updateItem: (id: string, updates: Partial<ListItem>) => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
+  loadListItems: (listId: string) => Promise<void>;
   
   addTemplate: (template: Omit<ListTemplate, 'id'>) => void;
   updateTemplate: (id: string, updates: Partial<ListTemplate>) => void;
   deleteTemplate: (id: string) => void;
   
   setCategoryBudgets: (categoryBudgets: { categoryId: string; budget: number }[]) => void;
+  
+  // Realtime updates
+  handleRealtimeUpdate: (payload: any, type: 'list' | 'item' | 'comment' | 'member') => void;
 }
 
 export const useShoppingStore = create<ShoppingStore>()(
@@ -40,6 +49,7 @@ export const useShoppingStore = create<ShoppingStore>()(
       currentList: null,
       lists: [],
       templates: [],
+      isLoading: false,
       categories: [
         { id: 'dairy', name: 'Laticínios', color: 'bg-blue-200' },
         { id: 'grains-cereals', name: 'Grãos e Cereais', color: 'bg-yellow-200' },
@@ -51,21 +61,79 @@ export const useShoppingStore = create<ShoppingStore>()(
         { id: 'others', name: 'Outros', color: 'bg-gray-200' },
       ],
 
-      createList: (name, budget) => {
-        const newList: ShoppingList = {
-          id: uuidv4(),
-          name,
-          items: [],
-          budget,
-          categoryBudgets: [],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+      createList: async (name, budget) => {
+        set({ isLoading: true });
+        try {
+          const newList = await SupabaseService.createList(name, budget);
+          
+          const formattedList: ShoppingList = {
+            id: newList.id,
+            name: newList.name,
+            items: [],
+            budget: newList.budget,
+            categoryBudgets: [],
+            createdAt: new Date(newList.created_at),
+            updatedAt: new Date(newList.updated_at),
+          };
 
-        set((state) => ({
-          lists: [...state.lists, newList],
-          currentList: newList,
-        }));
+          set((state) => ({
+            lists: [...state.lists, formattedList],
+            currentList: formattedList,
+            isLoading: false,
+          }));
+        } catch (error) {
+          console.error('Error creating list:', error);
+          set({ isLoading: false });
+        }
+      },
+
+      loadUserLists: async () => {
+        set({ isLoading: true });
+        try {
+          const lists = await SupabaseService.getUserLists();
+          const formattedLists: ShoppingList[] = lists.map(list => ({
+            id: list.id,
+            name: list.name,
+            items: [],
+            budget: list.budget,
+            categoryBudgets: [],
+            createdAt: new Date(list.created_at),
+            updatedAt: new Date(list.updated_at),
+          }));
+
+          set({ lists: formattedLists, isLoading: false });
+        } catch (error) {
+          console.error('Error loading lists:', error);
+          set({ isLoading: false });
+        }
+      },
+
+      loadListItems: async (listId: string) => {
+        try {
+          const items = await SupabaseService.getListItems(listId);
+          const formattedItems: ListItem[] = items.map(item => ({
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            purchased: item.purchased,
+            price: item.price,
+            addedBy: item.added_by?.name || 'Usuário',
+            categoryId: item.category_id,
+            assignedTo: item.assigned_to?.name,
+            claimedBy: item.claimed_by?.name,
+            order: item.item_order,
+            purchaseDate: item.purchase_date ? new Date(item.purchase_date) : undefined,
+          }));
+
+          set((state) => ({
+            currentList: state.currentList ? {
+              ...state.currentList,
+              items: formattedItems
+            } : null
+          }));
+        } catch (error) {
+          console.error('Error loading items:', error);
+        }
       },
 
       updateList: (id, updates) => {
@@ -87,86 +155,42 @@ export const useShoppingStore = create<ShoppingStore>()(
         }));
       },
 
-      setCurrentList: (listId) => {
+      setCurrentList: async (listId) => {
         const list = get().lists.find((l) => l.id === listId);
         if (list) {
           set({ currentList: list });
+          await get().loadListItems(listId);
         }
       },
 
-      addItem: (name, quantity, categoryId) => {
+      addItem: async (name, quantity, categoryId) => {
         const { currentList } = get();
         if (!currentList) return;
 
-        const newItem: ListItem = {
-          id: uuidv4(),
-          name,
-          quantity,
-          purchased: false,
-          addedBy: 'você',
-          categoryId,
-          order: currentList.items.length + 1,
-        };
-
-        const updatedItems = [...currentList.items, newItem];
-        const updatedList = { ...currentList, items: updatedItems, updatedAt: new Date() };
-
-        set((state) => ({
-          currentList: updatedList,
-          lists: state.lists.map((list) =>
-            list.id === currentList.id ? updatedList : list
-          ),
-        }));
+        try {
+          await SupabaseService.addItem(currentList.id, name, quantity, categoryId);
+          // O item será adicionado via realtime update
+        } catch (error) {
+          console.error('Error adding item:', error);
+        }
       },
 
-      updateItem: (id, updates) => {
-        const { currentList } = get();
-        if (!currentList) return;
-
-        const updatedItems = currentList.items.map((item) => {
-          if (item.id === id) {
-            // Se está marcando como comprado, adiciona ao histórico de preços
-            if (updates.purchased && updates.price && !item.purchased) {
-              const newPriceEntry = {
-                price: updates.price,
-                date: new Date(),
-              };
-              const updatedPriceHistory = [...(item.priceHistory || []), newPriceEntry];
-              return {
-                ...item,
-                ...updates,
-                priceHistory: updatedPriceHistory,
-                purchaseDate: new Date(),
-              };
-            }
-            return { ...item, ...updates };
-          }
-          return item;
-        });
-
-        const updatedList = { ...currentList, items: updatedItems, updatedAt: new Date() };
-
-        set((state) => ({
-          currentList: updatedList,
-          lists: state.lists.map((list) =>
-            list.id === currentList.id ? updatedList : list
-          ),
-        }));
+      updateItem: async (id, updates) => {
+        try {
+          await SupabaseService.updateItem(id, updates);
+          // O item será atualizado via realtime update
+        } catch (error) {
+          console.error('Error updating item:', error);
+        }
       },
 
-      deleteItem: (id) => {
-        const { currentList } = get();
-        if (!currentList) return;
-
-        const updatedItems = currentList.items.filter((item) => item.id !== id);
-        const updatedList = { ...currentList, items: updatedItems, updatedAt: new Date() };
-
-        set((state) => ({
-          currentList: updatedList,
-          lists: state.lists.map((list) =>
-            list.id === currentList.id ? updatedList : list
-          ),
-        }));
+      deleteItem: async (id) => {
+        try {
+          await SupabaseService.deleteItem(id);
+          // O item será removido via realtime update
+        } catch (error) {
+          console.error('Error deleting item:', error);
+        }
       },
 
       addTemplate: (template) => {
@@ -206,6 +230,58 @@ export const useShoppingStore = create<ShoppingStore>()(
             list.id === currentList.id ? updatedList : list
           ),
         }));
+      },
+
+      handleRealtimeUpdate: (payload, type) => {
+        console.log('Realtime update:', type, payload);
+        
+        if (type === 'item') {
+          const { currentList } = get();
+          if (!currentList) return;
+
+          if (payload.eventType === 'INSERT') {
+            const newItem: ListItem = {
+              id: payload.new.id,
+              name: payload.new.name,
+              quantity: payload.new.quantity,
+              purchased: payload.new.purchased,
+              price: payload.new.price,
+              addedBy: 'Outro usuário',
+              categoryId: payload.new.category_id,
+              order: payload.new.item_order,
+            };
+
+            set((state) => ({
+              currentList: state.currentList ? {
+                ...state.currentList,
+                items: [...state.currentList.items, newItem]
+              } : null
+            }));
+          } else if (payload.eventType === 'UPDATE') {
+            set((state) => ({
+              currentList: state.currentList ? {
+                ...state.currentList,
+                items: state.currentList.items.map(item =>
+                  item.id === payload.new.id ? {
+                    ...item,
+                    name: payload.new.name,
+                    quantity: payload.new.quantity,
+                    purchased: payload.new.purchased,
+                    price: payload.new.price,
+                    categoryId: payload.new.category_id,
+                  } : item
+                )
+              } : null
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            set((state) => ({
+              currentList: state.currentList ? {
+                ...state.currentList,
+                items: state.currentList.items.filter(item => item.id !== payload.old.id)
+              } : null
+            }));
+          }
+        }
       },
     }),
     {

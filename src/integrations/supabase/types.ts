@@ -9,7 +9,177 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      item_comments: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          text: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          text: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          text?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_comments_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "list_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      list_items: {
+        Row: {
+          added_by_id: string | null
+          assigned_to_id: string | null
+          category_id: string | null
+          claimed_by_id: string | null
+          created_at: string
+          id: string
+          item_order: number | null
+          list_id: string
+          name: string
+          price: number | null
+          purchase_date: string | null
+          purchased: boolean
+          quantity: number
+          updated_at: string
+        }
+        Insert: {
+          added_by_id?: string | null
+          assigned_to_id?: string | null
+          category_id?: string | null
+          claimed_by_id?: string | null
+          created_at?: string
+          id?: string
+          item_order?: number | null
+          list_id: string
+          name: string
+          price?: number | null
+          purchase_date?: string | null
+          purchased?: boolean
+          quantity?: number
+          updated_at?: string
+        }
+        Update: {
+          added_by_id?: string | null
+          assigned_to_id?: string | null
+          category_id?: string | null
+          claimed_by_id?: string | null
+          created_at?: string
+          id?: string
+          item_order?: number | null
+          list_id?: string
+          name?: string
+          price?: number | null
+          purchase_date?: string | null
+          purchased?: boolean
+          quantity?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "list_items_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "shopping_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      list_members: {
+        Row: {
+          id: string
+          joined_at: string
+          list_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          list_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          list_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "list_members_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "shopping_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopping_lists: {
+        Row: {
+          budget: number
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          budget?: number
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          budget?: number
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_profiles: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          name: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id: string
+          name?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -15,6 +15,9 @@ import { ItemPriceHistoryDialog } from "@/components/ItemPriceHistoryDialog";
 import { ListItem, ListTemplate } from "@/types/shopping";
 import { useShoppingStore } from "@/store/useShoppingStore";
 import { useCommentsStore } from "@/store/useCommentsStore";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { useAuthStore } from "@/store/useAuthStore";
+import { toast } from "sonner";
 
 const Lista = () => {
   const navigate = useNavigate();
@@ -31,7 +34,8 @@ const Lista = () => {
   const [draggedItem, setDraggedItem] = useState<ListItem | null>(null);
   const [groupBy, setGroupBy] = useState<'none' | 'category' | 'manual'>('none');
 
-  // Zustand store hooks
+  // Store hooks
+  const { user } = useAuthStore();
   const {
     currentList,
     categories,
@@ -40,16 +44,47 @@ const Lista = () => {
     updateItem,
     deleteItem,
     setCategoryBudgets,
+    loadUserLists,
+    setCurrentList,
+    handleRealtimeUpdate,
+    isLoading,
   } = useShoppingStore();
 
-  const { addComment, getItemComments } = useCommentsStore();
+  const { 
+    addComment, 
+    getItemComments, 
+    loadItemComments,
+    handleRealtimeCommentUpdate 
+  } = useCommentsStore();
 
-  // Initialize with a default list if none exists
+  // Realtime sync
+  useRealtimeSync({
+    listId: currentList?.id,
+    onListUpdate: (payload) => handleRealtimeUpdate(payload, 'list'),
+    onItemUpdate: (payload) => handleRealtimeUpdate(payload, 'item'),
+    onCommentUpdate: (payload) => handleRealtimeCommentUpdate(payload),
+    onMemberUpdate: (payload) => handleRealtimeUpdate(payload, 'member'),
+  });
+
+  // Initialize data
   useEffect(() => {
-    if (!currentList) {
-      createList("Lista de Compras", 500);
+    if (user) {
+      loadUserLists();
+    } else {
+      // Fallback para lista local se não estiver autenticado
+      if (!currentList) {
+        createList("Lista de Compras", 500);
+      }
     }
-  }, [currentList, createList]);
+  }, [user, currentList, createList, loadUserLists]);
+
+  // Load first list if available
+  useEffect(() => {
+    const state = useShoppingStore.getState();
+    if (user && state.lists.length > 0 && !currentList) {
+      setCurrentList(state.lists[0].id);
+    }
+  }, [user, currentList, setCurrentList]);
 
   // Get items from current list or empty array
   const items = currentList?.items || [];
@@ -61,7 +96,7 @@ const Lista = () => {
     const templateItems: ListItem[] = template.items.map((templateItem, index) => ({
       id: Date.now().toString() + index,
       ...templateItem,
-      purchased: false, // Add default purchased value
+      purchased: false,
       order: index + 1
     }));
     
@@ -128,6 +163,7 @@ const Lista = () => {
 
   const handleItemLongPress = (item: ListItem) => {
     setSelectedItem(item);
+    loadItemComments(item.id);
     setShowCommentsDialog(true);
   };
 
@@ -181,6 +217,18 @@ const Lista = () => {
 
   const remainingBalance = (currentList?.budget || 500) - totalSpent;
 
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="text-gray-600">Carregando...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
@@ -190,9 +238,16 @@ const Lista = () => {
             <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h1 className="text-xl font-bold text-gray-800">
-              {currentList?.name || 'Lista de Compras'}
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold text-gray-800">
+                {currentList?.name || 'Lista de Compras'}
+              </h1>
+              {user && (
+                <div className="text-xs text-green-600">
+                  🔄 Sincronização em tempo real ativa
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex space-x-2">
             <Button 

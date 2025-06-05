@@ -2,15 +2,17 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Comment } from '@/types/shopping';
-import { v4 as uuidv4 } from 'uuid';
+import { SupabaseService } from '@/services/supabaseService';
 
 interface CommentsStore {
   comments: Record<string, Comment[]>; // itemId -> comments
   
-  addComment: (itemId: string, text: string) => void;
+  addComment: (itemId: string, text: string) => Promise<void>;
   updateComment: (itemId: string, commentId: string, text: string) => void;
   deleteComment: (itemId: string, commentId: string) => void;
   getItemComments: (itemId: string) => Comment[];
+  loadItemComments: (itemId: string) => Promise<void>;
+  handleRealtimeCommentUpdate: (payload: any) => void;
 }
 
 export const useCommentsStore = create<CommentsStore>()(
@@ -18,20 +20,34 @@ export const useCommentsStore = create<CommentsStore>()(
     (set, get) => ({
       comments: {},
 
-      addComment: (itemId, text) => {
-        const newComment: Comment = {
-          id: uuidv4(),
-          text,
-          author: 'você',
-          timestamp: new Date(),
-        };
+      addComment: async (itemId, text) => {
+        try {
+          await SupabaseService.addComment(itemId, text);
+          // O comentário será adicionado via realtime update
+        } catch (error) {
+          console.error('Error adding comment:', error);
+        }
+      },
 
-        set((state) => ({
-          comments: {
-            ...state.comments,
-            [itemId]: [...(state.comments[itemId] || []), newComment],
-          },
-        }));
+      loadItemComments: async (itemId) => {
+        try {
+          const comments = await SupabaseService.getItemComments(itemId);
+          const formattedComments: Comment[] = comments.map(comment => ({
+            id: comment.id,
+            text: comment.text,
+            author: comment.user_profiles?.name || 'Usuário',
+            timestamp: new Date(comment.created_at),
+          }));
+
+          set((state) => ({
+            comments: {
+              ...state.comments,
+              [itemId]: formattedComments,
+            },
+          }));
+        } catch (error) {
+          console.error('Error loading comments:', error);
+        }
       },
 
       updateComment: (itemId, commentId, text) => {
@@ -58,6 +74,26 @@ export const useCommentsStore = create<CommentsStore>()(
 
       getItemComments: (itemId) => {
         return get().comments[itemId] || [];
+      },
+
+      handleRealtimeCommentUpdate: (payload) => {
+        console.log('Comment realtime update:', payload);
+        
+        if (payload.eventType === 'INSERT') {
+          const newComment: Comment = {
+            id: payload.new.id,
+            text: payload.new.text,
+            author: 'Outro usuário',
+            timestamp: new Date(payload.new.created_at),
+          };
+
+          set((state) => ({
+            comments: {
+              ...state.comments,
+              [payload.new.item_id]: [...(state.comments[payload.new.item_id] || []), newComment],
+            },
+          }));
+        }
       },
     }),
     {
