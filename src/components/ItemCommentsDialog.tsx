@@ -1,11 +1,9 @@
-
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageCircle, Send, Trash2 } from "lucide-react";
 import { ListItem, Comment } from "@/types/shopping";
-import { useCommentsStore } from "@/store/useCommentsStore";
 
 interface ItemCommentsDialogProps {
   open: boolean;
@@ -16,16 +14,6 @@ interface ItemCommentsDialogProps {
 
 export const ItemCommentsDialog = ({ open, onOpenChange, item, onAddComment }: ItemCommentsDialogProps) => {
   const [newComment, setNewComment] = useState("");
-  const { getItemComments, loadItemComments } = useCommentsStore();
-
-  // Load comments when dialog opens
-  useEffect(() => {
-    if (open && item.id) {
-      loadItemComments(item.id);
-    }
-  }, [open, item.id, loadItemComments]);
-
-  const comments = getItemComments(item.id);
 
   const handleAddComment = () => {
     if (newComment.trim()) {
@@ -55,8 +43,8 @@ export const ItemCommentsDialog = ({ open, onOpenChange, item, onAddComment }: I
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
-          {comments && comments.length > 0 ? (
-            comments.map((comment) => (
+          {item.comments && item.comments.length > 0 ? (
+            item.comments.map((comment) => (
               <div key={comment.id} className="bg-gray-50 p-3 rounded-lg">
                 <div className="flex justify-between items-start mb-2">
                   <div className="text-sm font-medium text-gray-800">

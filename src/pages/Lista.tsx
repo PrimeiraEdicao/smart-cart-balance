@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, Plus, Barcode, Users, PiggyBank, BookTemplate, TrendingUp, GripVertical } from "lucide-react";
@@ -12,12 +13,8 @@ import { CategoryBudgetDialog } from "@/components/CategoryBudgetDialog";
 import { CategorySpendingCard } from "@/components/CategorySpendingCard";
 import { ListTemplateDialog } from "@/components/ListTemplateDialog";
 import { ItemPriceHistoryDialog } from "@/components/ItemPriceHistoryDialog";
-import { ListItem, ListTemplate } from "@/types/shopping";
-import { useShoppingStore } from "@/store/useShoppingStore";
-import { useCommentsStore } from "@/store/useCommentsStore";
-import { useRealtimeSync } from "@/hooks/useRealtimeSync";
-import { useAuthStore } from "@/store/useAuthStore";
-import { toast } from "sonner";
+import { ListItem, Comment, ListTemplate, PriceEntry } from "@/types/shopping";
+import { defaultCategories } from "@/data/categories";
 
 const Lista = () => {
   const navigate = useNavigate();
@@ -33,79 +30,129 @@ const Lista = () => {
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
   const [draggedItem, setDraggedItem] = useState<ListItem | null>(null);
   const [groupBy, setGroupBy] = useState<'none' | 'category' | 'manual'>('none');
+  
+  const [items, setItems] = useState<ListItem[]>([
+    { 
+      id: '1', 
+      name: 'Arroz', 
+      quantity: 2, 
+      purchased: false, 
+      addedBy: 'você',
+      categoryId: 'grains-cereals',
+      order: 1,
+      priceHistory: [
+        { price: 4.20, date: new Date('2024-04-01') },
+        { price: 4.50, date: new Date('2024-04-08') }
+      ]
+    },
+    { 
+      id: '2', 
+      name: 'Feijão', 
+      quantity: 1, 
+      purchased: false, 
+      addedBy: 'João',
+      categoryId: 'grains-cereals',
+      order: 2,
+      assignedTo: 'João'
+    },
+    { 
+      id: '3', 
+      name: 'Açúcar', 
+      quantity: 1, 
+      purchased: true, 
+      price: 4.50, 
+      addedBy: 'você',
+      categoryId: 'grains-cereals',
+      purchaseDate: new Date(),
+      order: 3
+    },
+    { 
+      id: '4', 
+      name: 'Leite', 
+      quantity: 3, 
+      purchased: false, 
+      addedBy: 'Maria',
+      categoryId: 'dairy',
+      order: 4,
+      claimedBy: 'Maria'
+    },
+  ]);
 
-  // Store hooks
-  const { user } = useAuthStore();
-  const {
-    currentList,
-    categories,
-    createList,
-    addItem,
-    updateItem,
-    deleteItem,
-    setCategoryBudgets,
-    loadUserLists,
-    setCurrentList,
-    handleRealtimeUpdate,
-    isLoading,
-  } = useShoppingStore();
+  const [categoryBudgets, setCategoryBudgets] = useState<{ categoryId: string; budget: number }[]>([
+    { categoryId: 'dairy', budget: 50.00 },
+    { categoryId: 'grains-cereals', budget: 80.00 }
+  ]);
 
-  const { 
-    addComment, 
-    getItemComments, 
-    loadItemComments,
-    handleRealtimeCommentUpdate 
-  } = useCommentsStore();
+  // Smart suggestions based on purchase history
+  const [suggestionHistory] = useState([
+    'Banana', 'Maçã', 'Tomate', 'Cebola', 'Alho', 'Batata', 'Carne', 'Frango'
+  ]);
 
-  // Realtime sync
-  useRealtimeSync({
-    listId: currentList?.id,
-    onListUpdate: (payload) => handleRealtimeUpdate(payload, 'list'),
-    onItemUpdate: (payload) => handleRealtimeUpdate(payload, 'item'),
-    onCommentUpdate: (payload) => handleRealtimeCommentUpdate(payload),
-    onMemberUpdate: (payload) => handleRealtimeUpdate(payload, 'member'),
-  });
+  const addItem = (name: string, quantity: number, categoryId?: string) => {
+    const newItem: ListItem = {
+      id: Date.now().toString(),
+      name,
+      quantity,
+      purchased: false,
+      addedBy: 'você',
+      categoryId,
+      order: items.length + 1,
+    };
+    setItems([...items, newItem]);
+  };
 
-  // Initialize data
-  useEffect(() => {
-    if (user) {
-      loadUserLists();
-    } else {
-      // Fallback para lista local se não estiver autenticado
-      if (!currentList) {
-        createList("Lista de Compras", 500);
+  const updateItem = (id: string, updates: Partial<ListItem>) => {
+    setItems(items.map(item => {
+      if (item.id === id) {
+        // Se está marcando como comprado, adiciona ao histórico de preços
+        if (updates.purchased && updates.price && !item.purchased) {
+          const newPriceEntry: PriceEntry = {
+            price: updates.price,
+            date: new Date(),
+          };
+          const updatedPriceHistory = [...(item.priceHistory || []), newPriceEntry];
+          return { 
+            ...item, 
+            ...updates, 
+            priceHistory: updatedPriceHistory,
+            purchaseDate: new Date()
+          };
+        }
+        return { ...item, ...updates };
       }
-    }
-  }, [user, currentList, createList, loadUserLists]);
+      return item;
+    }));
+  };
 
-  // Load first list if available
-  useEffect(() => {
-    const state = useShoppingStore.getState();
-    if (user && state.lists.length > 0 && !currentList) {
-      setCurrentList(state.lists[0].id);
-    }
-  }, [user, currentList, setCurrentList]);
+  const deleteItem = (id: string) => {
+    setItems(items.filter(item => item.id !== id));
+  };
 
-  // Get items from current list or empty array
-  const items = currentList?.items || [];
-  const categoryBudgets = currentList?.categoryBudgets || [];
+  const addComment = (itemId: string, text: string) => {
+    setItems(items.map(item => {
+      if (item.id === itemId) {
+        const newComment: Comment = {
+          id: Date.now().toString(),
+          text,
+          author: 'você',
+          timestamp: new Date(),
+        };
+        return {
+          ...item,
+          comments: [...(item.comments || []), newComment]
+        };
+      }
+      return item;
+    }));
+  };
 
   const createFromTemplate = (template: ListTemplate) => {
-    if (!currentList) return;
-    
     const templateItems: ListItem[] = template.items.map((templateItem, index) => ({
       id: Date.now().toString() + index,
       ...templateItem,
-      purchased: false,
       order: index + 1
     }));
-    
-    // Clear current items and add template items
-    currentList.items.forEach(item => deleteItem(item.id));
-    templateItems.forEach(item => {
-      addItem(item.name, item.quantity, item.categoryId);
-    });
-    
+    setItems(templateItems);
     if (template.categoryBudgets) {
       setCategoryBudgets(template.categoryBudgets);
     }
@@ -141,29 +188,30 @@ const Lista = () => {
     newItems.splice(draggedIndex, 1);
     newItems.splice(targetIndex, 0, draggedItem);
 
-    // Update order for all items
-    newItems.forEach((item, index) => {
-      updateItem(item.id, { order: index + 1 });
-    });
+    // Update order
+    const updatedItems = newItems.map((item, index) => ({
+      ...item,
+      order: index + 1
+    }));
 
+    setItems(updatedItems);
     setDraggedItem(null);
   };
 
   const getCategoryName = (categoryId?: string) => {
     if (!categoryId) return null;
-    const category = categories.find(c => c.id === categoryId);
+    const category = defaultCategories.find(c => c.id === categoryId);
     return category ? category.name : null;
   };
 
   const getCategoryColor = (categoryId?: string) => {
     if (!categoryId) return 'bg-gray-200';
-    const category = categories.find(c => c.id === categoryId);
+    const category = defaultCategories.find(c => c.id === categoryId);
     return category ? category.color : 'bg-gray-200';
   };
 
   const handleItemLongPress = (item: ListItem) => {
     setSelectedItem(item);
-    loadItemComments(item.id);
     setShowCommentsDialog(true);
   };
 
@@ -215,19 +263,7 @@ const Lista = () => {
     .filter(item => item.purchased && item.price)
     .reduce((sum, item) => sum + (item.price! * item.quantity), 0);
 
-  const remainingBalance = (currentList?.budget || 500) - totalSpent;
-
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <div className="text-gray-600">Carregando...</div>
-        </div>
-      </div>
-    );
-  }
+  const remainingBalance = 500 - totalSpent;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -238,16 +274,7 @@ const Lista = () => {
             <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">
-                {currentList?.name || 'Lista de Compras'}
-              </h1>
-              {user && (
-                <div className="text-xs text-green-600">
-                  🔄 Sincronização em tempo real ativa
-                </div>
-              )}
-            </div>
+            <h1 className="text-xl font-bold text-gray-800">Lista de Compras</h1>
           </div>
           <div className="flex space-x-2">
             <Button 
@@ -334,90 +361,87 @@ const Lista = () => {
               )}
               
               <div className="space-y-3">
-                {groupItems.map((item) => {
-                  const itemComments = getItemComments(item.id);
-                  return (
-                    <Card 
-                      key={item.id} 
-                      className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
-                        item.purchased ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
-                      } ${draggedItem?.id === item.id ? 'opacity-50' : ''}`}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, item)}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, item)}
-                      onMouseDown={() => handleMouseDown(item)}
-                      onMouseUp={handleMouseUp}
-                      onMouseLeave={handleMouseUp}
-                      onTouchStart={() => handleMouseDown(item)}
-                      onTouchEnd={handleMouseUp}
-                      onClick={() => handleItemClick(item)}
-                      onDoubleClick={() => handleItemDoubleClick(item)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center space-x-3">
-                          <GripVertical className="h-4 w-4 text-gray-400" />
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-1">
-                              <div className={`font-medium ${item.purchased ? 'text-green-800 line-through' : 'text-gray-800'}`}>
-                                {item.name}
-                              </div>
-                              {item.categoryId && (
-                                <div className={`w-2 h-2 rounded-full ${getCategoryColor(item.categoryId)}`} />
-                              )}
-                              {item.priceHistory && item.priceHistory.length > 1 && (
-                                <TrendingUp className="h-3 w-3 text-blue-500" />
-                              )}
+                {groupItems.map((item) => (
+                  <Card 
+                    key={item.id} 
+                    className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+                      item.purchased ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
+                    } ${draggedItem?.id === item.id ? 'opacity-50' : ''}`}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, item)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, item)}
+                    onMouseDown={() => handleMouseDown(item)}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    onTouchStart={() => handleMouseDown(item)}
+                    onTouchEnd={handleMouseUp}
+                    onClick={() => handleItemClick(item)}
+                    onDoubleClick={() => handleItemDoubleClick(item)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center space-x-3">
+                        <GripVertical className="h-4 w-4 text-gray-400" />
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <div className={`font-medium ${item.purchased ? 'text-green-800 line-through' : 'text-gray-800'}`}>
+                              {item.name}
                             </div>
-                            
-                            <div className="text-sm text-gray-500">
-                              Quantidade: {item.quantity}
-                              {item.purchased && item.price && (
-                                <span className="ml-2 text-green-600 font-medium">
-                                  • R$ {(item.price * item.quantity).toFixed(2)}
-                                </span>
-                              )}
+                            {item.categoryId && (
+                              <div className={`w-2 h-2 rounded-full ${getCategoryColor(item.categoryId)}`} />
+                            )}
+                            {item.priceHistory && item.priceHistory.length > 1 && (
+                              <TrendingUp className="h-3 w-3 text-blue-500" />
+                            )}
+                          </div>
+                          
+                          <div className="text-sm text-gray-500">
+                            Quantidade: {item.quantity}
+                            {item.purchased && item.price && (
+                              <span className="ml-2 text-green-600 font-medium">
+                                • R$ {(item.price * item.quantity).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {item.categoryId && groupBy !== 'category' && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              {getCategoryName(item.categoryId)}
                             </div>
-                            
-                            {item.categoryId && groupBy !== 'category' && (
-                              <div className="text-xs text-gray-400 mt-1">
-                                {getCategoryName(item.categoryId)}
+                          )}
+                          
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            <div className="text-xs text-purple-600">
+                              Adicionado por {item.addedBy}
+                            </div>
+                            {item.assignedTo && (
+                              <div className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                Atribuído: {item.assignedTo}
                               </div>
                             )}
-                            
-                            <div className="flex flex-wrap gap-2 mt-1">
-                              <div className="text-xs text-purple-600">
-                                Adicionado por {item.addedBy}
-                              </div>
-                              {item.assignedTo && (
-                                <div className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                                  Atribuído: {item.assignedTo}
-                                </div>
-                              )}
-                              {item.claimedBy && (
-                                <div className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
-                                  Reivindicado: {item.claimedBy}
-                                </div>
-                              )}
-                            </div>
-                            
-                            {itemComments.length > 0 && (
-                              <div className="text-xs text-blue-600 mt-1">
-                                💬 {itemComments.length} comentário(s)
+                            {item.claimedBy && (
+                              <div className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                                Reivindicado: {item.claimedBy}
                               </div>
                             )}
                           </div>
                           
-                          {item.purchased && (
-                            <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                              Comprado
+                          {item.comments && item.comments.length > 0 && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              💬 {item.comments.length} comentário(s)
                             </div>
                           )}
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                        
+                        {item.purchased && (
+                          <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                            Comprado
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </div>
           ))}
@@ -472,7 +496,7 @@ const Lista = () => {
           open={showCommentsDialog}
           onOpenChange={setShowCommentsDialog}
           item={selectedItem}
-          onAddComment={(itemId, text) => addComment(itemId, text)}
+          onAddComment={addComment}
         />
       )}
 

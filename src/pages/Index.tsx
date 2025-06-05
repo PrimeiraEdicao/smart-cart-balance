@@ -2,15 +2,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Eye, EyeOff, User, List, ShoppingCart, Plus, FileDown, History, LogOut } from "lucide-react";
+import { Eye, EyeOff, User, List, ShoppingCart, Plus, FileDown, History } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useAuthStore } from "@/store/useAuthStore";
 
 const Index = () => {
   const [showBalance, setShowBalance] = useState(true);
   const [balance] = useState(500.00); // Saldo inicial
   const navigate = useNavigate();
-  const { user, signOut } = useAuthStore();
 
   const handleImportList = () => {
     // Simula seleção de arquivo
@@ -28,11 +26,6 @@ const Index = () => {
     input.click();
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/auth');
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
@@ -48,36 +41,14 @@ const Index = () => {
             >
               <History className="h-5 w-5" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="rounded-full"
-              onClick={handleSignOut}
-            >
-              <LogOut className="h-5 w-5" />
+            <Button variant="ghost" size="icon" className="rounded-full">
+              <User className="h-5 w-5" />
             </Button>
           </div>
         </div>
       </div>
 
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
-        {/* User Welcome */}
-        {user && (
-          <Card className="bg-white border border-gray-200">
-            <CardContent className="p-4">
-              <div className="flex items-center space-x-3">
-                <div className="bg-blue-100 p-2 rounded-full">
-                  <User className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-800">Bem-vindo!</div>
-                  <div className="text-sm text-gray-500">{user.email}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Saldo Card */}
         <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0 shadow-lg">
           <CardContent className="p-6">
