@@ -4,6 +4,7 @@ export interface Category {
   name: string;
   color: string;
   budget?: number;
+  user_id?: string; // Adicionar para consistência com o DB
 }
 
 export interface ListItem {
@@ -13,21 +14,22 @@ export interface ListItem {
   purchased: boolean;
   price?: number;
   addedBy?: string;
-  comments?: Comment[];
+  comments?: Comment[]; // Opcional, já que vamos buscar separadamente
   categoryId?: string;
-  purchaseDate?: Date;
-  priceHistory?: PriceEntry[];
-  assignedTo?: string;
-  claimedBy?: string;
-  group?: string;
+  purchaseDate?: Date | string; // Datas do Supabase vêm como string
   order?: number;
+  // Campos do DB que não precisamos sempre no front-end
+  user_id?: string;
+  created_at?: string;
 }
 
+// CORREÇÃO PRINCIPAL AQUI
 export interface Comment {
   id: string;
   text: string;
-  author: string;
-  timestamp: Date;
+  item_id: string; // Adicionar para referência
+  user_id: string; // Adicionar para referência
+  created_at: string; // Mudar de 'timestamp' para 'created_at' e de Date para string
 }
 
 export interface PriceEntry {

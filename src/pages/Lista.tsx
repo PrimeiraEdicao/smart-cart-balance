@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,6 +10,7 @@ import { CategoryManagerDialog } from "@/components/CategoryManagerDialog";
 import { ItemCommentsDialog } from "@/components/ItemCommentsDialog";
 import { useAppContext } from "@/context/AppContext";
 import { useShoppingListInteractions } from "@/hooks/useShoppingListInteractions";
+import { ListItem } from "@/types/shopping";
 
 const LoadingSkeleton = () => (
     <div className="p-4"><div className="max-w-md mx-auto space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-10 w-40" /><Skeleton className="h-28 w-full" /><Skeleton className="h-28 w-full" /></div></div>
@@ -18,18 +20,30 @@ const Lista = () => {
     const navigate = useNavigate();
     const { items, isLoadingItems, updateItem, deleteItem, updateItemsOrder } = useAppContext();
     
+    const [showAddDialog, setShowAddDialog] = useState(false);
+    const [showActionDialog, setShowActionDialog] = useState(false);
+    const [showCategoryManager, setShowCategoryManager] = useState(false);
+    const [showCommentsDialog, setShowCommentsDialog] = useState(false);
+    const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
+    
     const {
-        groupedItems, draggedItem, selectedItem, groupBy, setGroupBy,
-        showAddDialog, setShowAddDialog,
-        showActionDialog, setShowActionDialog,
-        showCategoryManager, setShowCategoryManager,
-        showCommentsDialog, setShowCommentsDialog,
-        getCategoryName, getCategoryColor, handleItemClick, handleCommentClick,
+        groupedItems, draggedItem, groupBy, setGroupBy,
+        getCategoryName, getCategoryColor,
         handleDragStart, handleDragOver, handleDrop
     } = useShoppingListInteractions(items, updateItemsOrder);
     
     if (isLoadingItems) return <LoadingSkeleton />;
-    
+
+    const handleItemClick = (item: ListItem) => {
+        setSelectedItem(item);
+        setShowActionDialog(true);
+    };
+
+    const handleCommentClick = (item: ListItem) => {
+        setSelectedItem(item);
+        setShowCommentsDialog(true);
+    };
+
     return (
         <div className="min-h-screen bg-gray-50">
             <header className="bg-white shadow-sm border-b sticky top-0 z-10">
@@ -41,19 +55,25 @@ const Lista = () => {
             </header>
 
             <main className="max-w-md mx-auto px-4 py-6">
+                <div className="flex space-x-2 mb-4">
+                  <Button variant={groupBy === 'none' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('none')}>Lista</Button>
+                  <Button variant={groupBy === 'category' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('category')}>Por Categoria</Button>
+                </div>
+
                 <div className="space-y-4">
+                    {/* CORREÇÃO: A iteração agora funciona para ambos os casos */}
                     {Object.entries(groupedItems).map(([groupKey, groupItems]) => (
                         <div key={groupKey}>
-                            {groupBy === 'category' && <h2 className="font-semibold text-gray-700 mb-2 flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${getCategoryColor(groupKey)}`} />{getCategoryName(groupKey) || 'Outros'}</h2>}
-                            {groupItems.map((item) => (
-                                <Card key={item.id} onClick={() => handleItemClick(item)} className="mb-2" draggable onDragStart={(e) => handleDragStart(e, item)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, item)} style={{ opacity: draggedItem?.id === item.id ? 0.5 : 1 }}>
+                            {groupBy === 'category' && groupKey !== 'all' && <h2 className="font-semibold text-gray-700 mb-2 flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${getCategoryColor(groupKey)}`} />{getCategoryName(groupKey)}</h2>}
+                            {groupItems.map((item: ListItem) => (
+                                <Card key={item.id} onClick={() => handleItemClick(item)} className="mb-2 cursor-pointer" draggable onDragStart={(e) => handleDragStart(e, item)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, item)} style={{ opacity: draggedItem?.id === item.id ? 0.5 : 1 }}>
                                     <CardContent className="p-3 flex items-center gap-3">
                                         <GripVertical className="h-5 w-5 text-gray-400 cursor-grab" />
                                         <div className="flex-1">
                                             <p className={`${item.purchased ? 'line-through text-gray-500' : ''}`}>{item.name}</p>
                                             <p className="text-sm text-gray-500">Qtd: {item.quantity}</p>
                                         </div>
-                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleCommentClick(item); }}>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleCommentClick(item); }}>
                                             <MessageSquare className="h-5 w-5 text-gray-600"/>
                                         </Button>
                                     </CardContent>
@@ -62,6 +82,7 @@ const Lista = () => {
                         </div>
                     ))}
                 </div>
+
                  {items.length === 0 && <p className="text-center text-gray-500 py-10">Sua lista está vazia.</p>}
             </main>
 

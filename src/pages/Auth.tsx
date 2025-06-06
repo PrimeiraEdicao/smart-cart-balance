@@ -1,22 +1,29 @@
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, SubmitHandler } from 'react-hook-form'; // Importar SubmitHandler
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { useAppContext } from '@/context/AppContext'; // 1. Usar o hook renomeado
+import { useAppContext } from '@/context/AppContext';
 import { toast } from "sonner";
-import { supabase } from '@/lib/supabase'; // Importar supabase diretamente para as funções de auth
+import { supabase } from '@/lib/supabase';
+
+// CORREÇÃO: Definir um tipo para os dados do formulário
+interface AuthFormData {
+  email: string;
+  password: string;
+}
 
 export const AuthPage = () => {
   const [loading, setLoading] = useState(false);
-  const { session } = useAppContext(); // Pegar a sessão para verificar se já está logado
+  const { session } = useAppContext();
   const navigate = useNavigate();
-  const { register, handleSubmit } = useForm();
+  // CORREÇÃO: Tipar o useForm
+  const { register, handleSubmit } = useForm<AuthFormData>();
 
-  // 2. Funções de auth agora são chamadas diretamente do supabase client
-  const handleSignIn = async (data: any) => {
+  // CORREÇÃO: Tipar o parâmetro 'data'
+  const handleSignIn: SubmitHandler<AuthFormData> = async (data) => {
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({
       email: data.email,
@@ -31,7 +38,8 @@ export const AuthPage = () => {
     setLoading(false);
   };
   
-  const handleSignUp = async (data: any) => {
+  // CORREÇÃO: Tipar o parâmetro 'data'
+  const handleSignUp: SubmitHandler<AuthFormData> = async (data) => {
     setLoading(true);
     const { error } = await supabase.auth.signUp({
       email: data.email,
@@ -45,7 +53,6 @@ export const AuthPage = () => {
     setLoading(false);
   };
 
-  // 3. Se o usuário já estiver logado, redireciona para a home
   if (session) {
     return <Navigate to="/" />;
   }
