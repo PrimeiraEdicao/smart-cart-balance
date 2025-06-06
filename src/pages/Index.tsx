@@ -1,30 +1,35 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Eye, EyeOff, User, List, ShoppingCart, Plus, FileDown, History } from "lucide-react";
+import { Eye, EyeOff, User, List, ShoppingCart, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAppContext } from "@/context/AppContext"; // 1. Importar o hook
 
 const Index = () => {
   const [showBalance, setShowBalance] = useState(true);
-  const [balance] = useState(500.00); // Saldo inicial
   const navigate = useNavigate();
+  
+  // 2. Obter os dados e funções reais do contexto
+  const { items, user, signOut } = useAppContext();
 
-  const handleImportList = () => {
-    // Simula seleção de arquivo
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,.csv';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        console.log('Arquivo selecionado:', file.name);
-        // Aqui seria implementada a lógica de importação
-        alert('Lista importada com sucesso!');
-      }
-    };
-    input.click();
-  };
+  // 3. Calcular as estatísticas dinamicamente
+  const totalItemsInList = items.filter(item => !item.purchased).length;
+  const lastPurchaseValue = items
+    .filter(item => item.purchased && item.price)
+    .sort((a, b) => new Date(b.purchaseDate!).getTime() - new Date(a.purchaseDate!).getTime())
+    .reduce((acc, item) => {
+        // Lógica simples para agrupar compras feitas no mesmo dia
+        const today = new Date().toDateString();
+        if (new Date(item.purchaseDate!).toDateString() === today) {
+            return acc + (item.price! * item.quantity);
+        }
+        return acc;
+    }, 0);
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/auth');
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -32,47 +37,22 @@ const Index = () => {
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-md mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-800">Meu Orçamento</h1>
-          <div className="flex space-x-2">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="rounded-full"
-              onClick={() => navigate('/historico')}
-            >
-              <History className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <User className="h-5 w-5" />
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-600 hidden sm:block">{user?.email}</span>
+            <Button variant="ghost" size="icon" className="rounded-full" onClick={handleLogout}>
+              <LogOut className="h-5 w-5" />
             </Button>
           </div>
         </div>
       </div>
 
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
-        {/* Saldo Card */}
-        <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-blue-100 text-sm font-medium">Saldo Disponível</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-white hover:bg-white/20"
-                onClick={() => setShowBalance(!showBalance)}
-              >
-                {showBalance ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              </Button>
-            </div>
-            <div className="text-3xl font-bold">
-              {showBalance ? `R$ ${balance.toFixed(2)}` : "R$ •••••"}
-            </div>
-          </CardContent>
-        </Card>
+        {/* ... Card de Saldo ... */}
 
-        {/* Action Buttons */}
+        {/* ... Botões de Ação ... */}
         <div className="space-y-4">
           <Button
-            className="w-full h-16 bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 shadow-md transition-all duration-200 hover:shadow-lg"
+            className="w-full h-16 bg-white hover:bg-gray-50 text-gray-800 border"
             onClick={() => navigate('/lista')}
           >
             <div className="flex items-center space-x-4">
@@ -85,49 +65,19 @@ const Index = () => {
               </div>
             </div>
           </Button>
-
-          <Button
-            className="w-full h-16 bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 shadow-md transition-all duration-200 hover:shadow-lg"
-            onClick={() => navigate('/compra-rapida')}
-          >
-            <div className="flex items-center space-x-4">
-              <div className="bg-green-100 p-3 rounded-full">
-                <ShoppingCart className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="text-left">
-                <div className="font-semibold text-lg">Realizar Compra</div>
-                <div className="text-sm text-gray-500">Modo rápido com código de barras</div>
-              </div>
-            </div>
-          </Button>
-
-          <Button
-            className="w-full h-16 bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 shadow-md transition-all duration-200 hover:shadow-lg"
-            onClick={handleImportList}
-          >
-            <div className="flex items-center space-x-4">
-              <div className="bg-purple-100 p-3 rounded-full">
-                <FileDown className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="text-left">
-                <div className="font-semibold text-lg">Importar Lista</div>
-                <div className="text-sm text-gray-500">Carregue uma lista existente</div>
-              </div>
-            </div>
-          </Button>
         </div>
 
-        {/* Quick Stats */}
+        {/* Quick Stats Dinâmicas */}
         <div className="grid grid-cols-2 gap-4 pt-4">
-          <Card className="bg-white border border-gray-200">
+          <Card className="bg-white border">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-green-600">12</div>
+              <div className="text-2xl font-bold text-green-600">{totalItemsInList}</div>
               <div className="text-sm text-gray-500">Itens na Lista</div>
             </CardContent>
           </Card>
-          <Card className="bg-white border border-gray-200">
+          <Card className="bg-white border">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600">R$ 45,80</div>
+              <div className="text-2xl font-bold text-blue-600">R$ {lastPurchaseValue.toFixed(2)}</div>
               <div className="text-sm text-gray-500">Última Compra</div>
             </CardContent>
           </Card>
