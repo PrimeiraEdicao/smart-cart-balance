@@ -1,8 +1,10 @@
+// src/context/AppContext.tsx
+
 import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { toast } from "sonner";
-import { ListItem, Category, Comment } from '@/types/shopping';
+import { ListItem, Category, Comment, PriceEntry } from '@/types/shopping'; // Adicionado PriceEntry
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { defaultCategories } from '@/data/categories';
 
@@ -24,6 +26,7 @@ interface AppContextType {
   deleteCategory: (id: string) => void;
   getComments: (itemId: string) => { data: Comment[], isLoading: boolean };
   addComment: (comment: { item_id: string, text: string }) => void;
+  getPriceHistory: (itemId: string) => { data: PriceEntry[], isLoading: boolean }; // Nova função
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -80,6 +83,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const { data, error } = await supabase.from('comments').select('*').eq('item_id', itemId).order('created_at');
         if (error) throw error;
         return data || [];
+      },
+      enabled: !!itemId,
+    });
+  };
+
+  // Nova função para buscar histórico de preços
+  const getPriceHistory = (itemId: string) => {
+    return useQuery({
+      queryKey: ['price_history', itemId],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('price_history')
+          .select('*')
+          .eq('item_id', itemId)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        // A interface PriceEntry espera 'date', então fazemos a conversão
+        return data.map(entry => ({ ...entry, date: new Date(entry.created_at) })) || [];
       },
       enabled: !!itemId,
     });
@@ -165,6 +186,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     items, isLoadingItems, addItem, updateItem, deleteItem, updateItemsOrder,
     categories, isLoadingCategories, addCategory, updateCategory, deleteCategory,
     getComments, addComment,
+    getPriceHistory, // Adicionando ao contexto
   };
 
   return <AppContext.Provider value={value as any}>{children}</AppContext.Provider>;

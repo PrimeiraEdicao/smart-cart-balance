@@ -1,3 +1,4 @@
+// src/components/QuickPurchaseDialog.tsx
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,14 +11,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Camera, CheckCircle } from "lucide-react";
+import { useAppContext } from "@/context/AppContext"; // Importa o hook
 
+// A prop onAddItem não é mais necessária
 interface QuickPurchaseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddItem: (name: string, quantity: number, price: number) => void;
 }
 
-export const QuickPurchaseDialog = ({ open, onOpenChange, onAddItem }: QuickPurchaseDialogProps) => {
+export const QuickPurchaseDialog = ({ open, onOpenChange }: QuickPurchaseDialogProps) => {
+  // O hook deve ser chamado dentro do componente
+  const { addItem } = useAppContext(); 
+  
   const [scanning, setScanning] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [detectedProduct, setDetectedProduct] = useState("");
@@ -42,7 +47,14 @@ export const QuickPurchaseDialog = ({ open, onOpenChange, onAddItem }: QuickPurc
 
   const handleComplete = () => {
     if (detectedProduct && quantity && price) {
-      onAddItem(detectedProduct, parseInt(quantity), parseFloat(price));
+      // Chama a função 'addItem' do contexto com os dados de um item comprado
+      addItem({
+        name: detectedProduct,
+        quantity: parseInt(quantity),
+        price: parseFloat(price),
+        purchased: true,
+        purchaseDate: new Date().toISOString(),
+      });
       handleClose();
     }
   };

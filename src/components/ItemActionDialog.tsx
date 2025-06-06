@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Edit, Camera, Trash2 } from "lucide-react";
 import { ListItem } from "@/types/shopping";
 import { BarcodeDialog } from "./BarcodeDialog";
+import { useAppContext } from "@/context/AppContext";
+import { supabase } from "@/lib/supabase";
 
 interface ItemActionDialogProps {
   open: boolean;
@@ -49,9 +51,16 @@ export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDel
   };
 
   const handleBarcodeComplete = (price: number) => {
-    // CORREÇÃO 4: Chamar onUpdateItem com um único objeto, como definido na interface
-    onUpdateItem({ id: item.id, purchased: true, price });
-    setShowBarcodeDialog(false);
+  onUpdateItem({ id: item.id, purchased: true, price, purchaseDate: new Date().toISOString() });
+
+  // Nova lógica para adicionar ao histórico
+  supabase.from('price_history').insert({
+    item_id: item.id,
+    price: price,
+    // store: 'Loja X' // Opcional, se você capturar essa informação
+  }).then(); // .then() para executar a promessa
+
+  setShowBarcodeDialog(false);
   };
 
   if (mode === 'edit') {

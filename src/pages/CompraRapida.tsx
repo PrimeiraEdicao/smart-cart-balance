@@ -1,41 +1,50 @@
+// src/pages/CompraRapida.tsx
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Plus, Camera } from "lucide-react";
+import { ArrowLeft, Camera } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { QuickPurchaseDialog } from "@/components/QuickPurchaseDialog";
+import { useAppContext } from "@/context/AppContext";
+import { Skeleton } from "@/components/ui/skeleton";
 
-export interface QuickPurchaseItem {
-  id: string;
-  name: string;
-  quantity: number;
-  price: number;
-  total: number;
-}
+// A interface QuickPurchaseItem não é mais necessária, usaremos ListItem do context
 
 const CompraRapida = () => {
   const navigate = useNavigate();
   const [showPurchaseDialog, setShowPurchaseDialog] = useState(false);
-  const [items, setItems] = useState<QuickPurchaseItem[]>([
-    { id: '1', name: 'Pão Francês', quantity: 10, price: 0.50, total: 5.00 },
-    { id: '2', name: 'Banana Prata', quantity: 2, price: 3.20, total: 6.40 },
-  ]);
+  
+  // Hooks devem ser chamados dentro do corpo do componente
+  const { items: allItems, isLoadingItems } = useAppContext();
 
-  const addItem = (name: string, quantity: number, price: number) => {
-    const total = quantity * price;
-    const newItem: QuickPurchaseItem = {
-      id: Date.now().toString(),
-      name,
-      quantity,
-      price,
-      total,
-    };
-    setItems([...items, newItem]);
-  };
+  // Filtra a lista para mostrar apenas itens comprados hoje
+  const purchasedToday = useMemo(() => {
+    const today = new Date().toDateString();
+    return allItems.filter(item => 
+      item.purchased && 
+      item.purchaseDate && 
+      new Date(item.purchaseDate).toDateString() === today
+    );
+  }, [allItems]);
+  
+  // Calcula o total gasto baseado nos itens reais filtrados
+  const totalSpent = useMemo(() => {
+    return purchasedToday.reduce((sum, item) => sum + (item.price! * item.quantity), 0);
+  }, [purchasedToday]);
 
-  const totalSpent = items.reduce((sum, item) => sum + item.total, 0);
+  // Saldo restante ainda usa um valor fixo (500). Isso pode ser melhorado no futuro.
   const remainingBalance = 500 - totalSpent;
+
+  if (isLoadingItems) {
+    return (
+        <div className="p-4 max-w-md mx-auto space-y-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-28 w-full" />
+        </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100">
@@ -68,20 +77,20 @@ const CompraRapida = () => {
 
         {/* Items List */}
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">Produtos Registrados</h2>
-          {items.map((item) => (
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Produtos Registrados Hoje</h2>
+          {purchasedToday.map((item) => (
             <Card key={item.id} className="bg-white border-gray-200">
               <CardContent className="p-4">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="font-medium text-gray-800">{item.name}</div>
                     <div className="text-sm text-gray-500 mt-1">
-                      {item.quantity} x R$ {item.price.toFixed(2)}
+                      {item.quantity} x R$ {item.price!.toFixed(2)}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-lg text-green-600">
-                      R$ {item.total.toFixed(2)}
+                      R$ {(item.price! * item.quantity).toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -90,11 +99,11 @@ const CompraRapida = () => {
           ))}
         </div>
 
-        {items.length === 0 && (
+        {purchasedToday.length === 0 && (
           <div className="text-center py-12">
             <Camera className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <div className="text-gray-400 text-lg mb-2">Nenhum produto registrado</div>
-            <div className="text-gray-500 text-sm">Use o botão + para escanear códigos de barras</div>
+            <div className="text-gray-400 text-lg mb-2">Nenhum produto registrado hoje</div>
+            <div className="text-gray-500 text-sm">Use o botão + para escanear e adicionar um produto</div>
           </div>
         )}
 
@@ -119,10 +128,10 @@ const CompraRapida = () => {
         </div>
       </Button>
 
+      {/* A prop 'onAddItem' foi removida */}
       <QuickPurchaseDialog
         open={showPurchaseDialog}
         onOpenChange={setShowPurchaseDialog}
-        onAddItem={addItem}
       />
     </div>
   );
