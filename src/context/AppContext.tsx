@@ -5,30 +5,30 @@ import { toast } from "sonner";
 import { ListItem, Category } from '@/types/shopping';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
+// 1. Renomear a interface do Contexto para refletir seu novo propósito
 interface AppContextType {
   session: Session | null;
   user: User | null;
+  loadingAuth: boolean; // Renomeado para clareza
   signOut: () => Promise<any>;
   items: ListItem[];
   isLoadingItems: boolean;
-  addItem: (item: Omit<ListItem, 'id' | 'user_id' | 'created_at'>) => void;
-  updateItem: (id: string, updates: Partial<ListItem>) => void;
+  updateItem: (variables: { id: string } & Partial<ListItem>) => void;
   deleteItem: (id: string) => void;
-  categories: Category[];
-  isLoadingCategories: boolean;
-  addCategory: (category: Omit<Category, 'id' | 'user_id' | 'created_at'>) => void;
+  // (outras funções e estados que você adicionará no futuro)
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const queryClient = useQueryClient();
 
   // --- AUTENTICAÇÃO ---
   useEffect(() => {
+    setLoadingAuth(true);
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -39,61 +39,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = () => supabase.auth.signOut();
   
-  // --- GERENCIAMENTO DE DADOS COM REACT QUERY ---
-
-  // BUSCAR CATEGORIAS
-  const { data: categories = [], isLoading: isLoadingCategories } = useQuery<Category[]>({
-    queryKey: ['categories', user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .order('name', { ascending: true });
-      if (error) throw new Error(error.message);
-      return data || [];
-    },
-    enabled: !!user, // Só executa a query se o usuário estiver logado
-  });
-
-  // BUSCAR ITENS
+  // --- GERENCIAMENTO DE DADOS (ITEMS) ---
   const { data: items = [], isLoading: isLoadingItems } = useQuery<ListItem[]>({
     queryKey: ['items', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('items')
-        .select('*')
-        .order('created_at', { ascending: true });
-      if (error) throw new Error(error.message);
-      return data || [];
+        if (!user) return [];
+        const { data, error } = await supabase.from('items').select('*').order('created_at');
+        if (error) throw new Error(error.message);
+        return data || [];
     },
     enabled: !!user,
   });
 
-  // --- MUTAÇÕES (Adicionar, Atualizar, Deletar) ---
-
-  const { mutate: addItem } = useMutation({
-    mutationFn: async (newItem: Omit<ListItem, 'id' | 'user_id' | 'created_at'>) => {
-      if (!user) throw new Error("Usuário não autenticado");
-      const { data, error } = await supabase
-        .from('items')
-        .insert([{ ...newItem, user_id: user.id }])
-        .select();
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    onSuccess: () => {
-      toast.success("Item adicionado!");
-      queryClient.invalidateQueries({ queryKey: ['items', user?.id] });
-    },
-    onError: (error) => toast.error(error.message),
-  });
-
   const { mutate: updateItem } = useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string } & Partial<ListItem>) => {
-      const { data, error } = await supabase
-        .from('items')
-        .update(updates)
-        .eq('id', id);
+    mutationFn: async (variables: { id: string } & Partial<ListItem>) => {
+      const { id, ...updates } = variables;
+      const { data, error } = await supabase.from('items').update(updates).eq('id', id);
       if (error) throw new Error(error.message);
       return data;
     },
@@ -102,9 +63,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     },
     onError: (error) => toast.error(error.message),
   });
-  
-  // O deleteItem agora é otimista, não precisa da lógica de "desfazer" manual.
-  // Se der erro, o react-query pode reverter.
+
   const { mutate: deleteItem } = useMutation({
     mutationFn: async (id: string) => {
        const { error } = await supabase.from('items').delete().eq('id', id);
@@ -116,57 +75,30 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     },
     onError: (error) => toast.error(error.message),
   });
-  
-   const { mutate: addCategory } = useMutation({
-    mutationFn: async (newCategory: Omit<Category, 'id' | 'user_id' | 'created_at'>) => {
-      if (!user) throw new Error("Usuário não autenticado");
-      const { data, error } = await supabase.from('categories').insert([{...newCategory, user_id: user.id}]);
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    onSuccess: () => {
-      toast.success("Categoria adicionada!");
-      queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
-    },
-    onError: (error) => toast.error(error.message)
-  });
-
-
-  // --- TEMPO REAL ---
-  useEffect(() => {
-    if (!user) return;
-    
-    const channel = supabase.channel('public:items')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items' },
-        (payload) => {
-          // Quando algo muda no banco de dados, invalida a query para forçar o re-fetch
-          queryClient.invalidateQueries({ queryKey: ['items', user.id] });
-        }
-      )
-      .subscribe();
-      
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, queryClient]);
 
   const value = {
-    session, user, signOut,
-    items, isLoadingItems, addItem, updateItem, deleteItem,
-    categories, isLoadingCategories, addCategory,
+    session,
+    user,
+    loadingAuth,
+    signOut,
+    items,
+    isLoadingItems,
+    updateItem,
+    deleteItem,
   };
 
   return (
-    <AppContext.Provider value={value as any}>
-      {!loadingAuth && children}
+    <AppContext.Provider value={value as AppContextType}>
+      {children}
     </AppContext.Provider>
   );
 };
 
-export const useShopping = () => {
+// 2. Renomear o hook para uso geral
+export const useAppContext = () => {
   const context = useContext(AppContext);
   if (context === undefined) {
-    throw new Error('useShopping must be used within an AppProvider');
+    throw new Error('useAppContext must be used within an AppProvider');
   }
   return context;
 };
