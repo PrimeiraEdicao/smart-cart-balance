@@ -1,39 +1,33 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { defaultCategories } from "@/data/categories";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useShopping } from "@/context/AppContext"; // 1. Importar o hook do contexto
 
+// 2. Remover 'onAddItem' das props
 interface AddItemDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddItem: (name: string, quantity: number, categoryId?: string) => void;
 }
 
-const commonItems = [
-  "Arroz", "Feijão", "Açúcar", "Sal", "Óleo", "Leite", "Ovos", "Pão",
-  "Banana", "Maçã", "Tomate", "Cebola", "Alho", "Batata", "Carne", "Frango"
-];
+export const AddItemDialog = ({ open, onOpenChange }: AddItemDialogProps) => {
+  // 3. Obter a função 'addItem' e as 'categories' diretamente do contexto
+  const { addItem, items, categories } = useShopping();
 
-export const AddItemDialog = ({ open, onOpenChange, onAddItem }: AddItemDialogProps) => {
   const [name, setName] = useState("");
-  const [quantity, setQuantity] = useState("");
+  const [quantity, setQuantity] = useState("1"); // Valor padrão para evitar erros
   const [categoryId, setCategoryId] = useState<string>("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
   const handleNameChange = (value: string) => {
     setName(value);
-    if (value.length > 0) {
-      const filtered = commonItems.filter(item => 
-        item.toLowerCase().includes(value.toLowerCase())
+    if (value.length > 1) {
+      const uniqueItemNames = [...new Set(items.map(item => item.name))];
+      const filtered = uniqueItemNames.filter(itemName => 
+        itemName.toLowerCase().includes(value.toLowerCase()) && 
+        itemName.toLowerCase() !== value.toLowerCase()
       );
       setSuggestions(filtered.slice(0, 5));
     } else {
@@ -43,9 +37,18 @@ export const AddItemDialog = ({ open, onOpenChange, onAddItem }: AddItemDialogPr
 
   const handleSubmit = () => {
     if (name && quantity) {
-      onAddItem(name, parseInt(quantity), categoryId || undefined);
+      // 4. Chamar 'addItem' do contexto diretamente, passando o objeto
+      addItem({ 
+        name, 
+        quantity: parseInt(quantity), 
+        categoryId: categoryId || undefined,
+        purchased: false,
+        addedBy: 'você' // Você pode pegar o nome do usuário logado aqui no futuro
+      });
+
+      // Limpa o formulário e fecha o diálogo
       setName("");
-      setQuantity("");
+      setQuantity("1");
       setCategoryId("");
       setSuggestions([]);
       onOpenChange(false);
@@ -73,6 +76,7 @@ export const AddItemDialog = ({ open, onOpenChange, onAddItem }: AddItemDialogPr
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
               className="mt-1"
+              autoComplete="off"
             />
             {suggestions.length > 0 && (
               <div className="mt-2 bg-white border border-gray-200 rounded-md shadow-sm max-h-32 overflow-y-auto">
@@ -96,7 +100,7 @@ export const AddItemDialog = ({ open, onOpenChange, onAddItem }: AddItemDialogPr
                 <SelectValue placeholder="Selecione uma categoria" />
               </SelectTrigger>
               <SelectContent>
-                {defaultCategories.map((category) => (
+                {categories.map((category) => (
                   <SelectItem key={category.id} value={category.id}>
                     <div className="flex items-center space-x-2">
                       <div className={`w-3 h-3 rounded-full ${category.color}`} />

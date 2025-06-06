@@ -1,14 +1,8 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Edit, Camera, Trash2 } from "lucide-react";
 import { ListItem } from "@/types/shopping";
 import { BarcodeDialog } from "./BarcodeDialog";
@@ -17,32 +11,31 @@ interface ItemActionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item: ListItem;
-  onUpdateItem: (id: string, updates: Partial<ListItem>) => void;
+  onUpdateItem: (variables: { id: string } & Partial<ListItem>) => void;
   onDeleteItem: (id: string) => void;
 }
 
-export const ItemActionDialog = ({ 
-  open, 
-  onOpenChange, 
-  item, 
-  onUpdateItem, 
-  onDeleteItem 
-}: ItemActionDialogProps) => {
-  const [mode, setMode] = useState<'actions' | 'edit' | 'barcode'>('actions');
+export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDeleteItem }: ItemActionDialogProps) => {
+  const [mode, setMode] = useState<'actions' | 'edit'>('actions');
   const [editQuantity, setEditQuantity] = useState(item.quantity.toString());
+  
+  // CORREÇÃO 1: Adicionar o estado que faltava para controlar o diálogo do código de barras
   const [showBarcodeDialog, setShowBarcodeDialog] = useState(false);
 
+  // CORREÇÃO 2: Definir a função para entrar no modo de edição
   const handleEdit = () => {
     setMode('edit');
   };
 
+  // CORREÇÃO 3: Definir a função para abrir o diálogo de scan
   const handleScanBarcode = () => {
     setShowBarcodeDialog(true);
+    // Fecha o diálogo de ações para não ter dois modais abertos
     onOpenChange(false);
   };
-
+  
   const handleSaveEdit = () => {
-    onUpdateItem(item.id, { quantity: parseInt(editQuantity) });
+    onUpdateItem({ id: item.id, quantity: parseInt(editQuantity) });
     onOpenChange(false);
     setMode('actions');
   };
@@ -54,18 +47,22 @@ export const ItemActionDialog = ({
   };
 
   const handleBarcodeComplete = (price: number) => {
-    onUpdateItem(item.id, { purchased: true, price });
+    // CORREÇÃO 4: Chamar onUpdateItem com um único objeto, como definido na interface
+    onUpdateItem({ id: item.id, purchased: true, price });
     setShowBarcodeDialog(false);
   };
 
   if (mode === 'edit') {
     return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={(isOpen) => {
+        onOpenChange(isOpen);
+        // Se fechar o modal, volta para a tela de ações
+        if (!isOpen) setMode('actions');
+      }}>
         <DialogContent className="max-w-sm mx-auto">
           <DialogHeader>
             <DialogTitle>Editar Item</DialogTitle>
           </DialogHeader>
-          
           <div className="space-y-4">
             <div>
               <Label>Nome do Item</Label>
@@ -73,7 +70,6 @@ export const ItemActionDialog = ({
                 {item.name}
               </div>
             </div>
-            
             <div>
               <Label htmlFor="quantity">Quantidade</Label>
               <Input
@@ -85,7 +81,6 @@ export const ItemActionDialog = ({
                 className="mt-1"
               />
             </div>
-            
             <div className="flex space-x-2">
               <Button variant="outline" onClick={() => setMode('actions')} className="flex-1">
                 Voltar
@@ -94,12 +89,7 @@ export const ItemActionDialog = ({
                 Salvar
               </Button>
             </div>
-            
-            <Button 
-              variant="destructive" 
-              onClick={handleDelete}
-              className="w-full"
-            >
+            <Button variant="destructive" onClick={handleDelete} className="w-full">
               <Trash2 className="h-4 w-4 mr-2" />
               Remover Item
             </Button>
@@ -109,6 +99,7 @@ export const ItemActionDialog = ({
     );
   }
 
+  // A tela principal de ações
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -116,7 +107,6 @@ export const ItemActionDialog = ({
           <DialogHeader>
             <DialogTitle>{item.name}</DialogTitle>
           </DialogHeader>
-          
           <div className="space-y-3">
             <div className="text-sm text-gray-600 mb-4">
               Quantidade: {item.quantity}
@@ -126,27 +116,14 @@ export const ItemActionDialog = ({
                 </div>
               )}
             </div>
-            
             <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                onClick={handleEdit}
-                className="h-20 flex flex-col items-center justify-center space-y-2"
-              >
+              <Button variant="outline" onClick={handleEdit} className="h-20 flex flex-col items-center justify-center space-y-2">
                 <Edit className="h-6 w-6" />
                 <span className="text-sm">Editar</span>
               </Button>
-              
-              <Button
-                variant="outline"
-                onClick={handleScanBarcode}
-                disabled={item.purchased}
-                className="h-20 flex flex-col items-center justify-center space-y-2"
-              >
+              <Button variant="outline" onClick={handleScanBarcode} disabled={item.purchased} className="h-20 flex flex-col items-center justify-center space-y-2">
                 <Camera className="h-6 w-6" />
-                <span className="text-sm">
-                  {item.purchased ? 'Comprado' : 'Registrar'}
-                </span>
+                <span className="text-sm">{item.purchased ? 'Comprado' : 'Registrar Compra'}</span>
               </Button>
             </div>
           </div>
