@@ -1,127 +1,77 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Tag, Plus, GripVertical } from "lucide-react";
+import { ArrowLeft, Tag, Plus, GripVertical, MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
 import { CategoryManagerDialog } from "@/components/CategoryManagerDialog";
+import { ItemCommentsDialog } from "@/components/ItemCommentsDialog";
 import { useAppContext } from "@/context/AppContext";
 import { useShoppingListInteractions } from "@/hooks/useShoppingListInteractions";
 
 const LoadingSkeleton = () => (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="max-w-md mx-auto space-y-4">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-10 w-40" />
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-full" />
-        </div>
-    </div>
+    <div className="p-4"><div className="max-w-md mx-auto space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-10 w-40" /><Skeleton className="h-28 w-full" /><Skeleton className="h-28 w-full" /></div></div>
 );
 
 const Lista = () => {
     const navigate = useNavigate();
+    const { items, isLoadingItems, updateItem, deleteItem, updateItemsOrder } = useAppContext();
     
-    // 1. Usar o hook renomeado e pegar os dados corretos
-    const { items, isLoadingItems, updateItem, deleteItem } = useAppContext();
-    
-    // 2. O hook de interações agora só precisa dos itens para funcionar
     const {
-        groupedItems,
-        selectedItem,
-        groupBy,
-        setGroupBy,
+        groupedItems, draggedItem, selectedItem, groupBy, setGroupBy,
         showAddDialog, setShowAddDialog,
         showActionDialog, setShowActionDialog,
         showCategoryManager, setShowCategoryManager,
-        handleItemClick,
-    } = useShoppingListInteractions(items);
+        showCommentsDialog, setShowCommentsDialog,
+        getCategoryName, getCategoryColor, handleItemClick, handleCommentClick,
+        handleDragStart, handleDragOver, handleDrop
+    } = useShoppingListInteractions(items, updateItemsOrder);
     
-    if (isLoadingItems) {
-        return <LoadingSkeleton />;
-    }
+    if (isLoadingItems) return <LoadingSkeleton />;
     
-    const totalSpent = items.filter(item => item.purchased && item.price).reduce((sum, item) => sum + (item.price! * item.quantity), 0);
-    const remainingBalance = 500 - totalSpent;
-
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-            <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-                <div className="max-w-md mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                        <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
-                            <ArrowLeft className="h-5 w-5" />
-                        </Button>
-                        <h1 className="text-xl font-bold text-gray-800">Lista de Compras</h1>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => setShowCategoryManager(true)}>
-                        <Tag className="h-4 w-4 mr-2"/>
-                        Categorias
-                    </Button>
+        <div className="min-h-screen bg-gray-50">
+            <header className="bg-white shadow-sm border-b sticky top-0 z-10">
+                <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+                    <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
+                    <h1 className="text-lg font-bold">Lista de Compras</h1>
+                    <Button variant="outline" size="sm" onClick={() => setShowCategoryManager(true)}><Tag className="h-4 w-4 mr-2"/>Categorias</Button>
                 </div>
-            </div>
+            </header>
 
-            <div className="max-w-md mx-auto px-4 py-6">
-                <Card className="mb-6 bg-gradient-to-r from-green-600 to-emerald-600 text-white border-0">
-                  <CardContent className="p-4">
-                    <div className="text-sm text-green-100 mb-1">Você ainda tem</div>
-                    <div className="text-2xl font-bold">R$ {remainingBalance.toFixed(2)}</div>
-                    <div className="text-sm text-green-100">do seu orçamento</div>
-                  </CardContent>
-                </Card>
-
-                <div className="flex space-x-2 mb-4">
-                  <Button variant={groupBy === 'none' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('none')}>
-                    Lista
-                  </Button>
-                  <Button variant={groupBy === 'category' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('category')}>
-                    Por Categoria
-                  </Button>
-                </div>
-
+            <main className="max-w-md mx-auto px-4 py-6">
                 <div className="space-y-4">
                     {Object.entries(groupedItems).map(([groupKey, groupItems]) => (
                         <div key={groupKey}>
-                            {/* ... Lógica de renderização dos grupos ... */}
-                            <div className="space-y-3">
-                                {groupItems.map((item) => (
-                                    <Card key={item.id} onClick={() => handleItemClick(item)}>
-                                        <CardContent className="p-4 flex items-center justify-between">
-                                            <div>
-                                                <p className={`${item.purchased ? 'line-through text-gray-500' : ''}`}>{item.name}</p>
-                                                <p className="text-sm text-gray-500">Qtd: {item.quantity}</p>
-                                            </div>
-                                            {item.purchased && item.price && <p className="text-green-600">R$ {item.price.toFixed(2)}</p>}
-                                        </CardContent>
-                                    </Card>
-                                ))}
-                            </div>
+                            {groupBy === 'category' && <h2 className="font-semibold text-gray-700 mb-2 flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${getCategoryColor(groupKey)}`} />{getCategoryName(groupKey) || 'Outros'}</h2>}
+                            {groupItems.map((item) => (
+                                <Card key={item.id} onClick={() => handleItemClick(item)} className="mb-2" draggable onDragStart={(e) => handleDragStart(e, item)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, item)} style={{ opacity: draggedItem?.id === item.id ? 0.5 : 1 }}>
+                                    <CardContent className="p-3 flex items-center gap-3">
+                                        <GripVertical className="h-5 w-5 text-gray-400 cursor-grab" />
+                                        <div className="flex-1">
+                                            <p className={`${item.purchased ? 'line-through text-gray-500' : ''}`}>{item.name}</p>
+                                            <p className="text-sm text-gray-500">Qtd: {item.quantity}</p>
+                                        </div>
+                                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleCommentClick(item); }}>
+                                            <MessageSquare className="h-5 w-5 text-gray-600"/>
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            ))}
                         </div>
                     ))}
                 </div>
+                 {items.length === 0 && <p className="text-center text-gray-500 py-10">Sua lista está vazia.</p>}
+            </main>
 
-                {items.length === 0 && (
-                    <div className="text-center py-12">
-                        <div className="text-gray-400 text-lg mb-2">Sua lista está vazia</div>
-                        <div className="text-gray-500 text-sm">Use o botão + para adicionar itens.</div>
-                    </div>
-                )}
-            </div>
-
-            <Button className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg" onClick={() => setShowAddDialog(true)}>
-                <Plus className="h-6 w-6" />
-            </Button>
+            <Button className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 text-white shadow-lg" onClick={() => setShowAddDialog(true)}><Plus className="h-6 w-6" /></Button>
 
             <AddItemDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
-            {selectedItem && (
-                <ItemActionDialog open={showActionDialog} onOpenChange={setShowActionDialog} item={selectedItem} onUpdateItem={updateItem} onDeleteItem={deleteItem} />
-            )}
+            {selectedItem && <ItemActionDialog open={showActionDialog} onOpenChange={setShowActionDialog} item={selectedItem} onUpdateItem={updateItem} onDeleteItem={deleteItem} />}
+            {selectedItem && <ItemCommentsDialog open={showCommentsDialog} onOpenChange={setShowCommentsDialog} item={selectedItem} />}
             <CategoryManagerDialog open={showCategoryManager} onOpenChange={setShowCategoryManager} />
         </div>
     );
 };
-
 export default Lista;

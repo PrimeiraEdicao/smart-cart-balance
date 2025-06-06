@@ -2,20 +2,28 @@ import React, { createContext, useContext, ReactNode, useState, useEffect } from
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { toast } from "sonner";
-import { ListItem, Category } from '@/types/shopping';
+import { ListItem, Category, Comment } from '@/types/shopping';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { defaultCategories } from '@/data/categories';
 
-// 1. Renomear a interface do Contexto para refletir seu novo propósito
 interface AppContextType {
   session: Session | null;
   user: User | null;
-  loadingAuth: boolean; // Renomeado para clareza
+  loadingAuth: boolean;
   signOut: () => Promise<any>;
   items: ListItem[];
   isLoadingItems: boolean;
+  addItem: (item: Partial<ListItem>) => void;
   updateItem: (variables: { id: string } & Partial<ListItem>) => void;
   deleteItem: (id: string) => void;
-  // (outras funções e estados que você adicionará no futuro)
+  updateItemsOrder: (items: ListItem[]) => void;
+  categories: Category[];
+  isLoadingCategories: boolean;
+  addCategory: (category: Omit<Category, 'id' | 'user_id'>) => void;
+  updateCategory: (variables: { id: string } & Partial<Category>) => void;
+  deleteCategory: (id: string) => void;
+  getComments: (itemId: string) => { data: Comment[], isLoading: boolean };
+  addComment: (comment: { item_id: string, text: string }) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -26,9 +34,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  // --- AUTENTICAÇÃO ---
   useEffect(() => {
-    setLoadingAuth(true);
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -38,67 +44,134 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signOut = () => supabase.auth.signOut();
-  
-  // --- GERENCIAMENTO DE DADOS (ITEMS) ---
-  const { data: items = [], isLoading: isLoadingItems } = useQuery<ListItem[]>({
-    queryKey: ['items', user?.id],
+
+  // --- QUERIES ---
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
+    queryKey: ['categories', user?.id],
     queryFn: async () => {
-        if (!user) return [];
-        const { data, error } = await supabase.from('items').select('*').order('created_at');
-        if (error) throw new Error(error.message);
-        return data || [];
+      if (!user) return [];
+      const { data, error } = await supabase.from('categories').select('*').order('name');
+      if (error) throw error;
+      if (data.length === 0) { // Seed initial categories for new users
+        const seedData = defaultCategories.map(c => ({ ...c, user_id: user.id }));
+        await supabase.from('categories').insert(seedData);
+        return seedData;
+      }
+      return data;
     },
     enabled: !!user,
   });
 
-  const { mutate: updateItem } = useMutation({
-    mutationFn: async (variables: { id: string } & Partial<ListItem>) => {
-      const { id, ...updates } = variables;
-      const { data, error } = await supabase.from('items').update(updates).eq('id', id);
-      if (error) throw new Error(error.message);
+  const { data: items = [], isLoading: isLoadingItems } = useQuery({
+    queryKey: ['items', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase.from('items').select('*').order('order');
+      if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items', user?.id] });
-    },
-    onError: (error) => toast.error(error.message),
+    enabled: !!user,
   });
 
-  const { mutate: deleteItem } = useMutation({
-    mutationFn: async (id: string) => {
-       const { error } = await supabase.from('items').delete().eq('id', id);
-       if (error) throw new Error(error.message);
+  const getComments = (itemId: string) => {
+    return useQuery({
+      queryKey: ['comments', itemId],
+      queryFn: async () => {
+        const { data, error } = await supabase.from('comments').select('*').eq('item_id', itemId).order('created_at');
+        if (error) throw error;
+        return data || [];
+      },
+      enabled: !!itemId,
+    });
+  };
+
+  // --- MUTATIONS ---
+  const { mutate: addItem } = useMutation({
+    mutationFn: async (newItem: Partial<ListItem>) => {
+      if (!user) throw new Error("Usuário não autenticado");
+      return supabase.from('items').insert([{ ...newItem, user_id: user.id }]).select();
     },
+    onSuccess: () => {
+      toast.success("Item adicionado!");
+      queryClient.invalidateQueries({ queryKey: ['items', user?.id] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const { mutate: updateItem } = useMutation({
+    mutationFn: async (variables: { id: string } & Partial<ListItem>) => supabase.from('items').update(variables).eq('id', variables.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['items', user?.id] }),
+    onError: (e: any) => toast.error(e.message),
+  });
+  
+  const { mutate: deleteItem } = useMutation({
+    mutationFn: async (id: string) => supabase.from('items').delete().eq('id', id),
     onSuccess: () => {
       toast.error("Item removido.");
       queryClient.invalidateQueries({ queryKey: ['items', user?.id] });
     },
-    onError: (error) => toast.error(error.message),
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const { mutate: updateItemsOrder } = useMutation({
+      mutationFn: async (orderedItems: ListItem[]) => {
+          const updates = orderedItems.map(item => ({ id: item.id, order: item.order }));
+          return supabase.from('items').upsert(updates);
+      },
+      onError: (e: any) => toast.error(e.message),
+  });
+
+  const { mutate: addCategory } = useMutation({
+      mutationFn: async (newCategory: Omit<Category, 'id' | 'user_id'>) => {
+          if (!user) throw new Error("Usuário não autenticado");
+          return supabase.from('categories').insert([{ ...newCategory, user_id: user.id }]);
+      },
+      onSuccess: () => {
+          toast.success("Categoria adicionada!");
+          queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
+      },
+      onError: (e: any) => toast.error(e.message),
+  });
+
+  const { mutate: updateCategory } = useMutation({
+      mutationFn: async (variables: { id: string } & Partial<Category>) => supabase.from('categories').update(variables).eq('id', variables.id),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories', user?.id] }),
+      onError: (e: any) => toast.error(e.message),
+  });
+
+  const { mutate: deleteCategory } = useMutation({
+      mutationFn: async (id: string) => supabase.from('categories').delete().eq('id', id),
+      onSuccess: () => {
+          toast.error("Categoria removida.");
+          queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
+      },
+      onError: (e: any) => toast.error(e.message),
+  });
+  
+  const { mutate: addComment } = useMutation({
+    mutationFn: async (newComment: { item_id: string, text: string }) => {
+        if (!user) throw new Error("Usuário não autenticado");
+        return supabase.from('comments').insert([{ ...newComment, user_id: user.id }]);
+    },
+    onSuccess: (_, variables) => {
+        toast.success("Comentário adicionado!");
+        queryClient.invalidateQueries({ queryKey: ['comments', variables.item_id] });
+    },
+    onError: (e: any) => toast.error(e.message),
   });
 
   const value = {
-    session,
-    user,
-    loadingAuth,
-    signOut,
-    items,
-    isLoadingItems,
-    updateItem,
-    deleteItem,
+    session, user, loadingAuth, signOut,
+    items, isLoadingItems, addItem, updateItem, deleteItem, updateItemsOrder,
+    categories, isLoadingCategories, addCategory, updateCategory, deleteCategory,
+    getComments, addComment,
   };
 
-  return (
-    <AppContext.Provider value={value as AppContextType}>
-      {children}
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={value as any}>{children}</AppContext.Provider>;
 };
 
-// 2. Renomear o hook para uso geral
 export const useAppContext = () => {
   const context = useContext(AppContext);
-  if (context === undefined) {
-    throw new Error('useAppContext must be used within an AppProvider');
-  }
+  if (context === undefined) throw new Error('useAppContext must be used within an AppProvider');
   return context;
 };
