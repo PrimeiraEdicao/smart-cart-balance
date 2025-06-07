@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { defaultCategories } from '@/data/categories';
 import usePersistentState from '@/hooks/usePersistentState';
 
+// ... (interface AppContextType - sem alterações)
 interface AppContextType {
   session: Session | null;
   user: User | null;
@@ -35,7 +36,7 @@ interface AppContextType {
   updateItem: (variables: { id: string } & Partial<ListItem>) => void;
   deleteItem: (id: string) => void;
   updateItemsOrder: (items: ListItem[]) => void;
-  deletePurchaseHistory: (itemIds: string[]) => void; // <- Nova função
+  deletePurchaseHistory: (itemIds: string[]) => void;
 
   categories: Category[];
   isLoadingCategories: boolean;
@@ -47,6 +48,7 @@ interface AppContextType {
   getPriceHistory: (itemId: string) => { data: PriceEntry[], isLoading: boolean };
 }
 
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
@@ -55,10 +57,48 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [activeListId, setActiveListId] = usePersistentState<string | null>('activeShoppingListId', null);
-  
   const [budget, setBudget] = usePersistentState<number>('mainBudget', 1000);
 
-  // ... (useEffect, signOut, queries... sem alteração)
+  // ... (useEffect de autenticação - sem alterações)
+
+  const { data: shoppingLists = [], isLoading: isLoadingLists } = useQuery({
+    queryKey: ['shoppingLists', user?.id],
+    queryFn: async () => {
+        if (!user) return [];
+        // Esta query agora busca tanto as listas do usuário quanto as que ele é membro.
+        const { data, error } = await supabase.rpc('get_user_shopping_lists');
+        if (error) throw error;
+        return data || [];
+    },
+    enabled: !!user,
+  });
+
+
+  const activeList = shoppingLists.find(list => list.id === activeListId) || null;
+
+  // ✅ EFEITO PARA SINCRONIZAÇÃO EM TEMPO REAL
+  useEffect(() => {
+    if (!activeList) return;
+
+    const channel = supabase.channel(`items_list_${activeList.id}`)
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${activeList.id}` },
+        (payload) => {
+          console.log('Mudança recebida!', payload);
+          // Invalida a query de itens para forçar a atualização dos dados
+          queryClient.invalidateQueries({ queryKey: ['items', activeList.id] });
+        }
+      )
+      .subscribe();
+
+    // Limpa a inscrição ao desmontar o componente ou trocar de lista
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeList, queryClient]);
+
+
+  // ... (Restante das queries e mutations sem alterações)
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
@@ -75,20 +115,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
     queryClient.clear();
   };
-
-  const { data: shoppingLists = [], isLoading: isLoadingLists } = useQuery({
-    queryKey: ['shoppingLists', user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase.from('shopping_lists').select('*');
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
-
-  const activeList = shoppingLists.find(list => list.id === activeListId) || null;
-
   const switchActiveList = (list: ShoppingList | null) => {
     setActiveListId(list?.id ?? null);
   };
@@ -191,7 +217,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setActiveListId(null);
     },
     onError: (e: any) => toast.error(e.message),
-  });
+});
   
   const { mutate: inviteMember } = useMutation({
     mutationFn: async (email: string) => {
@@ -259,11 +285,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       },
       onError: (e: any) => toast.error(e.message),
   });
-
-  // ✅ NOVA MUTATION PARA EXCLUIR HISTÓRICO
+  
   const { mutate: deletePurchaseHistory } = useMutation({
     mutationFn: async (itemIds: string[]) => {
-        // Reverte os itens para "não comprados"
         const updates = itemIds.map(id => ({
             id: id,
             purchased: false,
@@ -278,8 +302,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     },
     onError: (e: any) => toast.error(e.message),
   });
-
-  // ... (mutações de categoria e comentário... sem alteração)
+  
   const { mutate: addCategory } = useMutation({
     mutationFn: async (newCategory: Omit<Category, 'id' | 'user_id'>) => {
         if (!user) throw new Error("Usuário não autenticado");
@@ -292,31 +315,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     onError: (e: any) => toast.error(e.message),
   });
 
-const { mutate: updateCategory } = useMutation({
-    mutationFn: async (variables: { id: string } & Partial<Category>) => supabase.from('categories').update(variables).eq('id', variables.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories', user?.id] }),
-    onError: (e: any) => toast.error(e.message),
-});
+  const { mutate: updateCategory } = useMutation({
+      mutationFn: async (variables: { id: string } & Partial<Category>) => supabase.from('categories').update(variables).eq('id', variables.id),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories', user?.id] }),
+      onError: (e: any) => toast.error(e.message),
+  });
 
-const { mutate: deleteCategory } = useMutation({
-    mutationFn: async (id: string) => supabase.from('categories').delete().eq('id', id),
-    onSuccess: () => {
-        toast.error("Categoria removida.");
-        queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
+  const { mutate: deleteCategory } = useMutation({
+      mutationFn: async (id: string) => supabase.from('categories').delete().eq('id', id),
+      onSuccess: () => {
+          toast.error("Categoria removida.");
+          queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
+      },
+      onError: (e: any) => toast.error(e.message),
+  });
+
+  const { mutate: addComment } = useMutation({
+    mutationFn: async (newComment: { item_id: string, text: string }) => {
+        if (!user) throw new Error("Usuário não autenticado");
+        return supabase.from('comments').insert([{ ...newComment, user_id: user.id }]);
+    },
+    onSuccess: (_, variables) => {
+        toast.success("Comentário adicionado!");
+        queryClient.invalidateQueries({ queryKey: ['comments', variables.item_id] });
     },
     onError: (e: any) => toast.error(e.message),
-});
-
-const { mutate: addComment } = useMutation({
-  mutationFn: async (newComment: { item_id: string, text: string }) => {
-      if (!user) throw new Error("Usuário não autenticado");
-      return supabase.from('comments').insert([{ ...newComment, user_id: user.id }]);
-  },
-  onSuccess: (_, variables) => {
-      toast.success("Comentário adicionado!");
-      queryClient.invalidateQueries({ queryKey: ['comments', variables.item_id] });
-  },
-  onError: (e: any) => toast.error(e.message),
   });
 
   const value = {
@@ -324,7 +347,7 @@ const { mutate: addComment } = useMutation({
     budget, setBudget,
     shoppingLists, isLoadingLists, activeList, switchActiveList, createList, updateList, deleteList,
     members, isLoadingMembers, inviteMember, removeMember,
-    items, isLoadingItems, addItem, updateItem, deleteItem, updateItemsOrder, deletePurchaseHistory, // <- Exporta a nova função
+    items, isLoadingItems, addItem, updateItem, deleteItem, updateItemsOrder, deletePurchaseHistory,
     categories, isLoadingCategories, addCategory, updateCategory, deleteCategory,
     getComments, addComment, getPriceHistory,
   };
