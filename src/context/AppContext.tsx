@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery, QueryKey } fro
 import { defaultCategories } from '@/data/categories';
 import usePersistentState from '@/hooks/usePersistentState';
 
-// A interface do Contexto já está correta com as novas funcionalidades
+// Interface completa do Contexto
 interface AppContextType {
   session: Session | null;
   user: User | null;
@@ -145,12 +145,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [activeList, queryClient]);
   
-  // ✅ ALTERAÇÃO PRINCIPAL AQUI
   const { data: members = [], isLoading: isLoadingMembers } = useQuery({
     queryKey: ['members', activeList?.id],
     queryFn: async () => {
         if (!activeList) return [];
-        // Corrigido para usar 'user_profiles' e selecionar as colunas corretas
         const { data, error } = await supabase
             .from('list_members')
             .select('*, user_profile:user_profiles(id, email, name)')
@@ -315,7 +313,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { mutate: deleteList } = useMutation({
     mutationFn: async (listId: string) => supabase.from('shopping_lists').delete().eq('id', listId),
     onSuccess: () => {
-        toast.error("Lista removida.");
+        toast.success("Lista removida com sucesso.");
         queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
         setActiveListId(null);
     },
