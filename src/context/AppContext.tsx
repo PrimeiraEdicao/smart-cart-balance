@@ -6,6 +6,7 @@ import { ListItem, Category, Comment, PriceEntry, ShoppingList, ListMember } fro
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery, QueryKey } from '@tanstack/react-query';
 import { defaultCategories } from '@/data/categories';
 import usePersistentState from '@/hooks/usePersistentState';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 // Interface do Contexto (atualizada para infinite scroll e sugestões)
 interface AppContextType {
@@ -46,6 +47,9 @@ interface AppContextType {
   getPriceHistory: (itemId: string) => { data: PriceEntry[], isLoading: boolean };
   // ✅ NOVA FUNÇÃO PARA SUGESTÕES
   getHistoricItemNames: () => { data: string[], isLoading: boolean };
+  notifications: Notification[];
+  isLoadingNotifications: boolean;
+  markNotificationsAsRead: (notificationIds: string[]) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -59,6 +63,65 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [activeListId, setActiveListId] = usePersistentState<string | null>('activeShoppingListId', null);
   const [budget, setBudget] = usePersistentState<number>('mainBudget', 1000);
+
+  const { data: notifications = [], isLoading: isLoadingNotifications } = useQuery({
+    queryKey: ['notifications', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (error) {
+        toast.error("Erro ao buscar notificações.");
+        throw error;
+      }
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const { mutate: markNotificationsAsRead } = useMutation({
+    mutationFn: async (notificationIds: string[]) => {
+      if(notificationIds.length === 0) return;
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .in('id', notificationIds);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+    },
+    onError: () => toast.error("Erro ao marcar notificação como lida.")
+  });
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase.channel(`notifications_user_${user.id}`)
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          // Adiciona um toast quando uma nova notificação chega em tempo real
+          if (payload.new && payload.new.message) {
+            toast.info(payload.new.message);
+          }
+          // Invalida a query para forçar a atualização da lista de notificações
+          queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, queryClient]);
+
+  
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -392,6 +455,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addItem, updateItem, deleteItem, updateItemsOrder, deletePurchaseHistory,
     categories, isLoadingCategories, addCategory, updateCategory, deleteCategory,
     getComments, addComment, getPriceHistory, getHistoricItemNames,
+    notifications,
+    isLoadingNotifications,
+    markNotificationsAsRead,
   };
 
   return <AppContext.Provider value={value as any}>{children}</AppContext.Provider>;

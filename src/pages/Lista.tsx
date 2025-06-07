@@ -14,6 +14,7 @@ import { useAppContext } from "@/context/AppContext";
 import { useShoppingListInteractions } from "@/hooks/useShoppingListInteractions";
 import { ListItem } from "@/types/shopping";
 import { MemberBadge } from "@/components/MemberBadge";
+import { AssignmentBadge } from "@/components/AssignmentBadge";
 
 // ... (Componente ListItemCard memorizado - sem alterações)
 interface ListItemCardProps {
@@ -61,6 +62,10 @@ const ListItemCard = React.memo(({
                         {item.user_id && members.length > 1 && <MemberBadge userId={item.user_id} />}
                     </div>
                 </div>
+                
+                {/* ✅ Lógica para exibir o avatar de atribuição */}
+                {item.assigned_to_user_id && <AssignmentBadge userId={item.assigned_to_user_id} />}
+
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCommentButtonClick}>
                     <MessageSquare className="h-5 w-5 text-gray-600"/>
                 </Button>

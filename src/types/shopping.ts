@@ -20,6 +20,7 @@ export interface ListItem {
   user_id?: string;
   created_at?: string;
   list_id: string; 
+  assigned_to_user_id?: string;
 }
 
 export interface Comment {
@@ -74,12 +75,15 @@ export interface ListMember {
 
 export interface Notification {
   id: string;
-  type: 'item_added' | 'item_purchased' | 'item_commented' | 'member_added';
+  user_id: string; // ID de quem recebe a notificação
+  list_id: string;
+  item_id?: string;
+  type: string;
   message: string;
-  listId: string;
-  itemId?: string;
-  timestamp: Date;
   read: boolean;
+  created_at: string;
+  sender_name?: string;
+  sender_avatar_url?: string;
 }
 
 export interface DiscountCoupon {
