@@ -13,12 +13,16 @@ interface AppContextType {
   loadingAuth: boolean;
   signOut: () => Promise<any>;
   
+  // Orçamento adicionado ao contexto
+  budget: number;
+  setBudget: (newBudget: number) => void;
+
   shoppingLists: ShoppingList[];
   isLoadingLists: boolean;
   activeList: ShoppingList | null;
   switchActiveList: (list: ShoppingList | null) => void;
   createList: (name: string) => void;
-  updateList: (listId: string, newName: string) => void; // Adicionada função de update
+  updateList: (listId: string, newName: string) => void;
   deleteList: (listId: string) => void;
 
   members: ListMember[];
@@ -51,6 +55,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [activeListId, setActiveListId] = usePersistentState<string | null>('activeShoppingListId', null);
+  
+  // Orçamento agora é global e persistente
+  const [budget, setBudget] = usePersistentState<number>('mainBudget', 1000);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -86,21 +93,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setActiveListId(list?.id ?? null);
   };
 
-  // ... (código das queries de members, items, categories, etc. permanece o mesmo) ...
   const { data: members = [], isLoading: isLoadingMembers } = useQuery({
     queryKey: ['members', activeList?.id],
     queryFn: async () => {
         if (!activeList) return [];
-        const { data, error } = await supabase
-            .from('list_members')
-            .select('*, user_profile:profiles(id, email, raw_user_meta_data)')
-            .eq('list_id', activeList.id);
+        const { data, error } = await supabase.from('list_members').select('*, user_profile:profiles(id, email, raw_user_meta_data)').eq('list_id', activeList.id);
         if (error) throw error;
-        return (data || []).map(member => ({
-            ...member,
-            user_id: (member.user_profile as any)?.id ?? member.user_id,
-            user_profile: member.user_profile || { email: 'Convidado' }
-        }));
+        return (data || []).map(member => ({ ...member, user_id: (member.user_profile as any)?.id ?? member.user_id, user_profile: member.user_profile || { email: 'Convidado' } }));
     },
     enabled: !!activeList,
   });
@@ -157,7 +156,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  // --- MUTATIONS ---
   const { mutate: createList } = useMutation({
     mutationFn: async (name: string) => {
       if (!user) throw new Error("Usuário não autenticado");
@@ -167,17 +165,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     },
     onSuccess: (newList) => {
       toast.success(`Lista "${newList.name}" criada!`);
-      // CORREÇÃO: Atualiza o cache imediatamente
-      queryClient.setQueryData(['shoppingLists', user?.id], (oldData: ShoppingList[] | undefined) => {
-          return oldData ? [...oldData, newList] : [newList];
-      });
-      // Define a nova lista como ativa
+      queryClient.setQueryData(['shoppingLists', user?.id], (oldData: ShoppingList[] | undefined) => oldData ? [...oldData, newList] : [newList]);
       switchActiveList(newList);
     },
     onError: (e: any) => toast.error(e.message),
   });
 
-  // NOVA MUTATION
   const { mutate: updateList } = useMutation({
       mutationFn: async ({ listId, newName }: { listId: string, newName: string }) => {
           const { error } = await supabase.from('shopping_lists').update({ name: newName }).eq('id', listId);
@@ -189,8 +182,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       },
       onError: (e: any) => toast.error(e.message),
   });
-
-  // ... (código das outras mutações permanece o mesmo) ...
 
   const { mutate: deleteList } = useMutation({
     mutationFn: async (listId: string) => supabase.from('shopping_lists').delete().eq('id', listId),
@@ -205,11 +196,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 const { mutate: inviteMember } = useMutation({
   mutationFn: async (email: string) => {
       if (!activeList || !user) throw new Error("Nenhuma lista ativa ou usuário não autenticado.");
-      // O ideal é chamar uma função Edge do Supabase para convidar
-      const { error } = await supabase.rpc('invite_user_to_list', {
-          p_list_id: activeList.id,
-          p_invitee_email: email
-      });
+      const { error } = await supabase.rpc('invite_user_to_list', { p_list_id: activeList.id, p_invitee_email: email });
       if (error) throw new Error(error.message);
   },
   onSuccess: (_, email) => {
@@ -244,8 +231,16 @@ const { mutate: addItem } = useMutation({
 });
 
 const { mutate: updateItem } = useMutation({
-  mutationFn: async (variables: { id: string } & Partial<ListItem>) => supabase.from('items').update(variables).eq('id', variables.id),
-  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] }),
+  mutationFn: async (variables: { id: string } & Partial<ListItem>) => supabase.from('items').update(variables).eq('id', variables.id).select().single(),
+  onSuccess: (updatedItem, variables) => {
+    if (variables.purchased && variables.price && variables.quantity) {
+      const spent = variables.price * variables.quantity;
+      const newBudget = budget - spent;
+      setBudget(newBudget);
+      toast.success(`Compra registrada! Saldo restante: R$ ${newBudget.toFixed(2)}`);
+    }
+    queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] });
+  },
   onError: (e: any) => toast.error(e.message),
 });
 
@@ -308,6 +303,7 @@ const { mutate: addComment } = useMutation({
 
   const value = {
     session, user, loadingAuth, signOut,
+    budget, setBudget,
     shoppingLists, isLoadingLists, activeList, switchActiveList, createList, updateList, deleteList,
     members, isLoadingMembers, inviteMember, removeMember,
     items, isLoadingItems, addItem, updateItem, deleteItem, updateItemsOrder,

@@ -1,5 +1,3 @@
-// src/components/ItemActionDialog.tsx
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +6,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Edit, Camera, Trash2 } from "lucide-react";
 import { ListItem } from "@/types/shopping";
 import { BarcodeDialog } from "./BarcodeDialog";
-import { useAppContext } from "@/context/AppContext";
 import { supabase } from "@/lib/supabase";
 
 interface ItemActionDialogProps {
@@ -22,19 +19,14 @@ interface ItemActionDialogProps {
 export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDeleteItem }: ItemActionDialogProps) => {
   const [mode, setMode] = useState<'actions' | 'edit'>('actions');
   const [editQuantity, setEditQuantity] = useState(item.quantity.toString());
-  
-  // CORREÇÃO 1: Adicionar o estado que faltava para controlar o diálogo do código de barras
   const [showBarcodeDialog, setShowBarcodeDialog] = useState(false);
 
-  // CORREÇÃO 2: Definir a função para entrar no modo de edição
   const handleEdit = () => {
     setMode('edit');
   };
 
-  // CORREÇÃO 3: Definir a função para abrir o diálogo de scan
   const handleScanBarcode = () => {
     setShowBarcodeDialog(true);
-    // Fecha o diálogo de ações para não ter dois modais abertos
     onOpenChange(false);
   };
   
@@ -51,25 +43,26 @@ export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDel
   };
 
   const handleBarcodeComplete = (price: number) => {
-  onUpdateItem({ id: item.id, purchased: true, price, purchaseDate: new Date().toISOString() });
+    // ATUALIZADO: Inclui a quantidade na chamada de atualização
+    onUpdateItem({ 
+      id: item.id, 
+      purchased: true, 
+      price, 
+      purchaseDate: new Date().toISOString(),
+      quantity: item.quantity,
+    });
 
-  // Nova lógica para adicionar ao histórico
-  supabase.from('price_history').insert({
-    item_id: item.id,
-    price: price,
-    // store: 'Loja X' // Opcional, se você capturar essa informação
-  }).then(); // .then() para executar a promessa
+    supabase.from('price_history').insert({
+      item_id: item.id,
+      price: price,
+    }).then();
 
-  setShowBarcodeDialog(false);
+    setShowBarcodeDialog(false);
   };
 
   if (mode === 'edit') {
     return (
-      <Dialog open={open} onOpenChange={(isOpen) => {
-        onOpenChange(isOpen);
-        // Se fechar o modal, volta para a tela de ações
-        if (!isOpen) setMode('actions');
-      }}>
+      <Dialog open={open} onOpenChange={(isOpen) => { onOpenChange(isOpen); if (!isOpen) setMode('actions'); }}>
         <DialogContent className="max-w-sm mx-auto">
           <DialogHeader>
             <DialogTitle>Editar Item</DialogTitle>
@@ -77,28 +70,15 @@ export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDel
           <div className="space-y-4">
             <div>
               <Label>Nome do Item</Label>
-              <div className="mt-1 p-2 bg-gray-50 rounded border text-sm text-gray-700">
-                {item.name}
-              </div>
+              <div className="mt-1 p-2 bg-gray-50 rounded border text-sm text-gray-700">{item.name}</div>
             </div>
             <div>
               <Label htmlFor="quantity">Quantidade</Label>
-              <Input
-                id="quantity"
-                type="number"
-                min="1"
-                value={editQuantity}
-                onChange={(e) => setEditQuantity(e.target.value)}
-                className="mt-1"
-              />
+              <Input id="quantity" type="number" min="1" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} className="mt-1" />
             </div>
             <div className="flex space-x-2">
-              <Button variant="outline" onClick={() => setMode('actions')} className="flex-1">
-                Voltar
-              </Button>
-              <Button onClick={handleSaveEdit} className="flex-1">
-                Salvar
-              </Button>
+              <Button variant="outline" onClick={() => setMode('actions')} className="flex-1">Voltar</Button>
+              <Button onClick={handleSaveEdit} className="flex-1">Salvar</Button>
             </div>
             <Button variant="destructive" onClick={handleDelete} className="w-full">
               <Trash2 className="h-4 w-4 mr-2" />
@@ -110,7 +90,6 @@ export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDel
     );
   }
 
-  // A tela principal de ações
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
