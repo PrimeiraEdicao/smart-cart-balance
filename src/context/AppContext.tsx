@@ -3,20 +3,18 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { toast } from "sonner";
 import { ListItem, Category, Comment, PriceEntry, ShoppingList, ListMember } from '@/types/shopping';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery, QueryKey } from '@tanstack/react-query';
 import { defaultCategories } from '@/data/categories';
 import usePersistentState from '@/hooks/usePersistentState';
 
-// ... (interface AppContextType - sem alterações)
+// Interface do Contexto (atualizada para infinite scroll)
 interface AppContextType {
   session: Session | null;
   user: User | null;
   loadingAuth: boolean;
   signOut: () => Promise<any>;
-  
   budget: number;
   setBudget: (newBudget: number) => void;
-
   shoppingLists: ShoppingList[];
   isLoadingLists: boolean;
   activeList: ShoppingList | null;
@@ -24,20 +22,20 @@ interface AppContextType {
   createList: (name: string) => void;
   updateList: (listId: string, newName: string) => void;
   deleteList: (listId: string) => void;
-
   members: ListMember[];
   isLoadingMembers: boolean;
   inviteMember: (email: string) => void;
   removeMember: (userId: string) => void;
-
   items: ListItem[];
   isLoadingItems: boolean;
+  fetchNextPage: () => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
   addItem: (item: Partial<Omit<ListItem, 'list_id'>>) => void;
   updateItem: (variables: { id: string } & Partial<ListItem>) => void;
   deleteItem: (id: string) => void;
   updateItemsOrder: (items: ListItem[]) => void;
   deletePurchaseHistory: (itemIds: string[]) => void;
-
   categories: Category[];
   isLoadingCategories: boolean;
   addCategory: (category: Omit<Category, 'id' | 'user_id'>) => void;
@@ -48,8 +46,9 @@ interface AppContextType {
   getPriceHistory: (itemId: string) => { data: PriceEntry[], isLoading: boolean };
 }
 
-
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const PAGE_SIZE = 30;
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
@@ -59,46 +58,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [activeListId, setActiveListId] = usePersistentState<string | null>('activeShoppingListId', null);
   const [budget, setBudget] = usePersistentState<number>('mainBudget', 1000);
 
-  // ... (useEffect de autenticação - sem alterações)
-
-  const { data: shoppingLists = [], isLoading: isLoadingLists } = useQuery({
-    queryKey: ['shoppingLists', user?.id],
-    queryFn: async () => {
-        if (!user) return [];
-        // Esta query agora busca tanto as listas do usuário quanto as que ele é membro.
-        const { data, error } = await supabase.rpc('get_user_shopping_lists');
-        if (error) throw error;
-        return data || [];
-    },
-    enabled: !!user,
-  });
-
-
-  const activeList = shoppingLists.find(list => list.id === activeListId) || null;
-
-  // ✅ EFEITO PARA SINCRONIZAÇÃO EM TEMPO REAL
-  useEffect(() => {
-    if (!activeList) return;
-
-    const channel = supabase.channel(`items_list_${activeList.id}`)
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${activeList.id}` },
-        (payload) => {
-          console.log('Mudança recebida!', payload);
-          // Invalida a query de itens para forçar a atualização dos dados
-          queryClient.invalidateQueries({ queryKey: ['items', activeList.id] });
-        }
-      )
-      .subscribe();
-
-    // Limpa a inscrição ao desmontar o componente ou trocar de lista
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [activeList, queryClient]);
-
-
-  // ... (Restante das queries e mutations sem alterações)
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
@@ -115,10 +74,75 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
     queryClient.clear();
   };
+
+  // ✅ CORREÇÃO AQUI: A query de listas é definida separadamente
+  const { data: shoppingLists = [], isLoading: isLoadingLists } = useQuery({
+    queryKey: ['shoppingLists', user?.id],
+    queryFn: async () => {
+        if (!user) return [];
+        const { data, error } = await supabase.rpc('get_user_shopping_lists');
+        if (error) throw error;
+        return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const activeList = shoppingLists.find(list => list.id === activeListId) || null;
+
   const switchActiveList = (list: ShoppingList | null) => {
     setActiveListId(list?.id ?? null);
   };
+  
+  const { 
+    data, 
+    fetchNextPage, 
+    hasNextPage, 
+    isLoading: isLoadingItems, 
+    isFetchingNextPage 
+  } = useInfiniteQuery({
+    queryKey: ['items', activeList?.id],
+    queryFn: async ({ pageParam = 0 }) => {
+      if (!activeList) return [];
+      const from = pageParam * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
 
+      const { data, error } = await supabase
+        .from('items')
+        .select('*')
+        .eq('list_id', activeList.id)
+        .order('order', { ascending: false })
+        .range(from, to);
+      
+      if (error) throw error;
+      return data;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      return lastPage && lastPage.length === PAGE_SIZE ? allPages.length : undefined;
+    },
+    enabled: !!activeList,
+  });
+
+  const items = data?.pages.flatMap(page => page) ?? [];
+
+  useEffect(() => {
+    if (!activeList) return;
+    const queryKey: QueryKey = ['items', activeList.id];
+    const channel = supabase.channel(`items_list_${activeList.id}`)
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'items', filter: `list_id=eq.${activeList.id}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeList, queryClient]);
+
+  // ... (restante do código, sem alterações)
   const { data: members = [], isLoading: isLoadingMembers } = useQuery({
     queryKey: ['members', activeList?.id],
     queryFn: async () => {
@@ -126,17 +150,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const { data, error } = await supabase.from('list_members').select('*, user_profile:profiles(id, email, raw_user_meta_data)').eq('list_id', activeList.id);
         if (error) throw error;
         return (data || []).map(member => ({ ...member, user_id: (member.user_profile as any)?.id ?? member.user_id, user_profile: member.user_profile || { email: 'Convidado' } }));
-    },
-    enabled: !!activeList,
-  });
-
-  const { data: items = [], isLoading: isLoadingItems } = useQuery({
-    queryKey: ['items', activeList?.id],
-    queryFn: async () => {
-      if (!activeList) return [];
-      const { data, error } = await supabase.from('items').select('*').eq('list_id', activeList.id).order('order');
-      if (error) throw error;
-      return data;
     },
     enabled: !!activeList,
   });
@@ -190,7 +203,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return data[0] as ShoppingList;
     },
     onSuccess: (newList) => {
-      toast.success(`Lista "${newList.name}" criada!`);
       queryClient.setQueryData(['shoppingLists', user?.id], (oldData: ShoppingList[] | undefined) => oldData ? [...oldData, newList] : [newList]);
       switchActiveList(newList);
     },
@@ -227,7 +239,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     },
     onSuccess: (_, email) => {
         toast.success(`Convite enviado para ${email}!`);
-        queryClient.invalidateQueries({ queryKey: ['members', activeList?.id] });
+        queryClient.invalidateQueries({ queryKey: ['members', activeList.id] });
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -239,7 +251,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       },
       onSuccess: () => {
           toast.info("Membro removido.");
-          queryClient.invalidateQueries({ queryKey: ['members', activeList?.id] });
+          queryClient.invalidateQueries({ queryKey: ['members', activeList.id] });
       },
       onError: (e: any) => toast.error(e.message),
   });
@@ -347,7 +359,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     budget, setBudget,
     shoppingLists, isLoadingLists, activeList, switchActiveList, createList, updateList, deleteList,
     members, isLoadingMembers, inviteMember, removeMember,
-    items, isLoadingItems, addItem, updateItem, deleteItem, updateItemsOrder, deletePurchaseHistory,
+    items, isLoadingItems, fetchNextPage, hasNextPage, isFetchingNextPage,
+    addItem, updateItem, deleteItem, updateItemsOrder, deletePurchaseHistory,
     categories, isLoadingCategories, addCategory, updateCategory, deleteCategory,
     getComments, addComment, getPriceHistory,
   };
