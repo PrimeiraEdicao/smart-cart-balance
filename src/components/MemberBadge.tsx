@@ -8,14 +8,14 @@ interface MemberBadgeProps {
 export const MemberBadge = ({ userId }: MemberBadgeProps) => {
   const { user, members } = useAppContext();
 
-  // Se o ID for do usuário atual, mostra "Você"
   if (userId === user?.id) {
     return <Badge variant="secondary">Você</Badge>;
   }
 
-  // Procura o nome do membro na lista de membros da lista
   const member = members.find(m => m.user_id === userId);
-  const memberName = member?.user_profile?.raw_user_meta_data?.name || member?.user_profile?.email?.split('@')[0];
+  
+  // ✅ Com o tipo corrigido em shopping.ts, esta linha agora é válida.
+  const memberName = member?.user_profile?.name || member?.user_profile?.email?.split('@')[0];
 
   if (memberName) {
     return <Badge variant="outline">{memberName}</Badge>;

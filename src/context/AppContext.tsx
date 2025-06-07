@@ -2,13 +2,12 @@ import React, { createContext, useContext, ReactNode, useState, useEffect } from
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { toast } from "sonner";
-import { ListItem, Category, Comment, PriceEntry, ShoppingList, ListMember } from '@/types/shopping';
+import { ListItem, Category, Comment, PriceEntry, ShoppingList, ListMember, Notification } from '@/types/shopping';
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery, QueryKey } from '@tanstack/react-query';
 import { defaultCategories } from '@/data/categories';
 import usePersistentState from '@/hooks/usePersistentState';
-import { RealtimeChannel } from '@supabase/supabase-js';
 
-// Interface do Contexto (atualizada para infinite scroll e sugestões)
+// A interface do Contexto já está correta com as novas funcionalidades
 interface AppContextType {
   session: Session | null;
   user: User | null;
@@ -45,7 +44,6 @@ interface AppContextType {
   getComments: (itemId: string) => { data: Comment[], isLoading: boolean };
   addComment: (comment: { item_id: string, text: string }) => void;
   getPriceHistory: (itemId: string) => { data: PriceEntry[], isLoading: boolean };
-  // ✅ NOVA FUNÇÃO PARA SUGESTÕES
   getHistoricItemNames: () => { data: string[], isLoading: boolean };
   notifications: Notification[];
   isLoadingNotifications: boolean;
@@ -63,65 +61,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [activeListId, setActiveListId] = usePersistentState<string | null>('activeShoppingListId', null);
   const [budget, setBudget] = usePersistentState<number>('mainBudget', 1000);
-
-  const { data: notifications = [], isLoading: isLoadingNotifications } = useQuery({
-    queryKey: ['notifications', user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(30);
-
-      if (error) {
-        toast.error("Erro ao buscar notificações.");
-        throw error;
-      }
-      return data || [];
-    },
-    enabled: !!user,
-  });
-
-  const { mutate: markNotificationsAsRead } = useMutation({
-    mutationFn: async (notificationIds: string[]) => {
-      if(notificationIds.length === 0) return;
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .in('id', notificationIds);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
-    },
-    onError: () => toast.error("Erro ao marcar notificação como lida.")
-  });
-
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase.channel(`notifications_user_${user.id}`)
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          // Adiciona um toast quando uma nova notificação chega em tempo real
-          if (payload.new && payload.new.message) {
-            toast.info(payload.new.message);
-          }
-          // Invalida a query para forçar a atualização da lista de notificações
-          queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, queryClient]);
-
-  
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -206,12 +145,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [activeList, queryClient]);
   
+  // ✅ ALTERAÇÃO PRINCIPAL AQUI
   const { data: members = [], isLoading: isLoadingMembers } = useQuery({
     queryKey: ['members', activeList?.id],
     queryFn: async () => {
         if (!activeList) return [];
-        const { data, error } = await supabase.from('list_members').select('*, user_profile:profiles(id, email, raw_user_meta_data)').eq('list_id', activeList.id);
-        if (error) throw error;
+        // Corrigido para usar 'user_profiles' e selecionar as colunas corretas
+        const { data, error } = await supabase
+            .from('list_members')
+            .select('*, user_profile:user_profiles(id, email, name)')
+            .eq('list_id', activeList.id);
+
+        if (error) {
+            console.error("Erro ao buscar membros: ", error);
+            throw error;
+        }
         return (data || []).map(member => ({ ...member, user_id: (member.user_profile as any)?.id ?? member.user_id, user_profile: member.user_profile || { email: 'Convidado' } }));
     },
     enabled: !!activeList,
@@ -234,7 +182,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     enabled: !!user,
   });
 
-  // ✅ NOVA QUERY PARA BUSCAR NOMES HISTÓRICOS DE ITENS
   const { data: historicItemNames = [], isLoading: isLoadingHistoricItemNames } = useQuery({
     queryKey: ['historicItemNames', user?.id],
     queryFn: async () => {
@@ -243,25 +190,77 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         .from('items')
         .select('name')
         .eq('user_id', user.id)
-        .limit(1000); // Limite para evitar sobrecarga
+        .limit(1000);
 
       if (error) {
         console.error("Erro ao buscar nomes de itens históricos:", error);
         return [];
       }
-
-      // Processa para obter nomes únicos
       const names = data.map(item => item.name);
       return [...new Set(names)];
     },
     enabled: !!user,
-    staleTime: 1000 * 60 * 60, // Cache de 1 hora
+    staleTime: 1000 * 60 * 60,
   });
 
   const getHistoricItemNames = () => ({
       data: historicItemNames,
       isLoading: isLoadingHistoricItemNames
   });
+
+  const { data: notifications = [], isLoading: isLoadingNotifications } = useQuery({
+    queryKey: ['notifications', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      
+      if (error) {
+        toast.error("Erro ao buscar notificações: " + error.message);
+        throw error;
+      }
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const { mutate: markNotificationsAsRead } = useMutation({
+    mutationFn: async (notificationIds: string[]) => {
+      if(notificationIds.length === 0) return;
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .in('id', notificationIds);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+    },
+    onError: () => toast.error("Erro ao marcar notificação como lida.")
+  });
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase.channel(`notifications_user_${user.id}`)
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          if (payload.new && payload.new.message) {
+            toast.info(payload.new.message as string);
+          }
+          queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, queryClient]);
 
   const getComments = (itemId: string) => {
     return useQuery({
@@ -321,7 +320,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setActiveListId(null);
     },
     onError: (e: any) => toast.error(e.message),
-});
+  });
   
   const { mutate: inviteMember } = useMutation({
     mutationFn: async (email: string) => {

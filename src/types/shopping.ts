@@ -64,12 +64,12 @@ export interface ListMember {
   list_id: string;
   user_id: string;
   role: 'owner' | 'member';
+  // ✅ CORREÇÃO PRINCIPAL AQUI
+  // A estrutura do user_profile agora reflete diretamente as colunas da sua tabela 'user_profiles'.
   user_profile?: {
+    id?: string;
     email?: string;
-    raw_user_meta_data?: {
-      name?: string;
-      avatar_url?: string;
-    }
+    name?: string; // Removido o aninhamento 'raw_user_meta_data'
   }
 }
 

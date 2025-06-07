@@ -19,7 +19,7 @@ interface ItemActionDialogProps {
 }
 
 export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDeleteItem }: ItemActionDialogProps) => {
-  const { members } = useAppContext(); // Pegar membros da lista
+  const { members } = useAppContext();
   const [mode, setMode] = useState<'actions' | 'edit'>('actions');
   const [editQuantity, setEditQuantity] = useState(item.quantity.toString());
   const [assignedTo, setAssignedTo] = useState(item.assigned_to_user_id || "none");
@@ -44,7 +44,6 @@ export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDel
   const handleDelete = () => {
     onDeleteItem(item.id);
     onOpenChange(false);
-    setMode('actions');
   };
 
   const handleScanBarcode = () => {
@@ -70,7 +69,33 @@ export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDel
   };
 
   if (mode === 'edit') {
-    // ... (o modo de edição continua o mesmo, sem alterações)
+    return (
+      <Dialog open={open} onOpenChange={(isOpen) => { onOpenChange(isOpen); if (!isOpen) setMode('actions'); }}>
+        <DialogContent className="max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Nome do Item</Label>
+              <div className="mt-1 p-2 bg-gray-50 rounded border text-sm text-gray-700">{item.name}</div>
+            </div>
+            <div>
+              <Label htmlFor="quantity">Quantidade</Label>
+              <Input id="quantity" type="number" min="1" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} className="mt-1" />
+            </div>
+            <div className="flex space-x-2">
+              <Button variant="outline" onClick={() => setMode('actions')} className="flex-1">Voltar</Button>
+              <Button onClick={handleSaveEdit} className="flex-1">Salvar</Button>
+            </div>
+            <Button variant="destructive" onClick={handleDelete} className="w-full">
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remover Item
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
   }
 
   return (
@@ -90,7 +115,6 @@ export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDel
               )}
             </div>
 
-            {/* ✅ NOVO CAMPO DE ATRIBUIÇÃO */}
             {members.length > 1 && (
               <div>
                 <Label htmlFor="assign" className="flex items-center gap-2 mb-1">
@@ -104,7 +128,8 @@ export const ItemActionDialog = ({ open, onOpenChange, item, onUpdateItem, onDel
                     <SelectItem value="none">Ninguém (Geral)</SelectItem>
                     {members.map(member => (
                       <SelectItem key={member.user_id} value={member.user_id}>
-                        {member.user_profile?.raw_user_meta_data?.name || member.user_profile?.email}
+                        {/* ✅ CORREÇÃO AQUI: Usando a nova estrutura de dados */}
+                        {member.user_profile?.name || member.user_profile?.email}
                       </SelectItem>
                     ))}
                   </SelectContent>
