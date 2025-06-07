@@ -1,7 +1,6 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-// ✅ 1. Importar QueryClient e QueryClientProvider
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
@@ -12,20 +11,17 @@ import CompraRapida from "./pages/CompraRapida";
 import Historico from "./pages/Historico";
 import NotFound from "./pages/NotFound";
 import { AuthPage } from "./pages/Auth";
+import { UpdatePasswordPage } from "./pages/UpdatePassword"; // Importe a nova página
 
 // Provedor e Rota Protegida
 import { AppProvider } from "./context/AppContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
-// ✅ 2. Criar o QueryClient com configurações otimizadas
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Evita que os dados sejam buscados novamente toda vez que a janela ganha foco
       refetchOnWindowFocus: false, 
-      // Evita refetch ao reconectar
       refetchOnReconnect: false,
-      // Aumenta o tempo que os dados são considerados "novos" para 5 minutos
       staleTime: 1000 * 60 * 5,
     },
   },
@@ -39,8 +35,9 @@ const App = () => (
           <Toaster />
           <Sonner />
           <Routes>
-            {/* Rota pública de autenticação */}
+            {/* Rotas públicas */}
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/update-password" element={<UpdatePasswordPage />} />
 
             {/* Rotas protegidas */}
             <Route element={<ProtectedRoute />}>
