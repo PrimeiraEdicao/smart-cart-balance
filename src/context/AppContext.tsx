@@ -13,21 +13,18 @@ interface AppContextType {
   loadingAuth: boolean;
   signOut: () => Promise<any>;
   
-  // Gerenciamento de Listas
   shoppingLists: ShoppingList[];
   isLoadingLists: boolean;
   activeList: ShoppingList | null;
   switchActiveList: (list: ShoppingList | null) => void;
-  createList: (name: string) => void;
+  createList: (name: string, onSuccess?: (newList: ShoppingList) => void) => void;
   deleteList: (listId: string) => void;
 
-  // Gerenciamento de Membros
   members: ListMember[];
   isLoadingMembers: boolean;
   inviteMember: (email: string) => void;
   removeMember: (userId: string) => void;
 
-  // Gerenciamento de Itens (agora depende da lista ativa)
   items: ListItem[];
   isLoadingItems: boolean;
   addItem: (item: Partial<Omit<ListItem, 'list_id'>>) => void;
@@ -35,7 +32,6 @@ interface AppContextType {
   deleteItem: (id: string) => void;
   updateItemsOrder: (items: ListItem[]) => void;
 
-  // Categorias, Comentários e Histórico (permanecem semelhantes)
   categories: Category[];
   isLoadingCategories: boolean;
   addCategory: (category: Omit<Category, 'id' | 'user_id'>) => void;
@@ -61,7 +57,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       setUser(session?.user ?? null);
       setLoadingAuth(false);
       if (!session) {
-        setActiveListId(null); // Limpa a lista ativa no logout
+        setActiveListId(null);
       }
     });
     return () => subscription.unsubscribe();
@@ -69,10 +65,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    queryClient.clear(); // Limpa todo o cache no logout
+    queryClient.clear();
   };
 
-  // --- Gerenciamento de Listas ---
   const { data: shoppingLists = [], isLoading: isLoadingLists } = useQuery({
     queryKey: ['shoppingLists', user?.id],
     queryFn: async () => {
@@ -89,23 +84,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const switchActiveList = (list: ShoppingList | null) => {
     setActiveListId(list?.id ?? null);
   };
-  
-  // --- QUERIES ---
 
   const { data: members = [], isLoading: isLoadingMembers } = useQuery({
     queryKey: ['members', activeList?.id],
     queryFn: async () => {
-      if (!activeList) return [];
-      // Esta é uma query mais complexa para buscar o perfil do membro junto
-      const { data, error } = await supabase
-        .from('list_members')
-        .select('*, user_profile:profiles(email, raw_user_meta_data)')
-        .eq('list_id', activeList.id);
-      if (error) throw error;
-      return data || [];
+        if (!activeList) return [];
+        const { data, error } = await supabase
+            .from('list_members')
+            .select('*, user_profile:profiles(id, email, raw_user_meta_data)')
+            .eq('list_id', activeList.id);
+        if (error) throw error;
+        // Mapeamento para ajustar a estrutura do `user_profile`
+        return (data || []).map(member => ({
+            ...member,
+            user_id: (member.user_profile as any)?.id ?? member.user_id, // Garante que o user_id seja o do perfil
+            user_profile: member.user_profile || { email: 'Convidado' } // Fallback
+        }));
     },
     enabled: !!activeList,
-  });
+});
 
   const { data: items = [], isLoading: isLoadingItems } = useQuery({
     queryKey: ['items', activeList?.id],
@@ -113,22 +110,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (!activeList) return [];
       const { data, error } = await supabase.from('items').select('*').eq('list_id', activeList.id).order('order');
       if (error) throw error;
-      return data || [];
+      return data;
     },
     enabled: !!activeList,
   });
   
-  //... o restante das queries (categories, comments, price_history) permanece o mesmo
   const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
     queryKey: ['categories', user?.id],
     queryFn: async () => {
       if (!user) return [];
       const { data, error } = await supabase.from('categories').select('*').order('name');
       if (error) throw error;
-      if (data.length === 0) { // Seed initial categories for new users
+      if (data.length === 0) {
         const seedData = defaultCategories.map(c => ({ ...c, user_id: user.id }));
-        await supabase.from('categories').insert(seedData);
-        return seedData;
+        const { data: insertedData, error: insertError } = await supabase.from('categories').insert(seedData).select();
+        if (insertError) throw insertError;
+        return insertedData;
       }
       return data;
     },
@@ -163,22 +160,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  // --- MUTATIONS ---
   const { mutate: createList } = useMutation({
-    mutationFn: async (name: string) => {
-      if (!user) throw new Error("Usuário não autenticado");
-      // Cria a lista no banco de dados. Uma função de DB (trigger) pode adicionar o criador como 'owner'
-      // ou fazemos isso manualmente. Por simplicidade, faremos via trigger.
-      const { data, error } = await supabase.rpc('create_new_list', { list_name: name });
-      if (error) throw error;
-      return data;
+    mutationFn: async ({ name }: { name: string }) => {
+        if (!user) throw new Error("Usuário não autenticado");
+        const { data, error } = await supabase.rpc('create_new_list', { list_name: name });
+        if (error) throw error;
+        // Retorna o primeiro (e único) item do resultado do RPC
+        return data[0] as ShoppingList;
     },
-    onSuccess: () => {
-      toast.success("Nova lista criada!");
-      queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
+    onSuccess: (newList) => {
+        toast.success(`Lista "${newList.name}" criada!`);
+        queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
+        // ATUALIZADO: Define a nova lista como ativa
+        switchActiveList(newList);
     },
     onError: (e: any) => toast.error(e.message),
-  });
+});
+
+  const createListWrapper = (name: string) => {
+    createList({ name });
+  };
 
   const { mutate: deleteList } = useMutation({
       mutationFn: async (listId: string) => supabase.from('shopping_lists').delete().eq('id', listId),
@@ -193,10 +194,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { mutate: inviteMember } = useMutation({
     mutationFn: async (email: string) => {
         if (!activeList || !user) throw new Error("Nenhuma lista ativa ou usuário não autenticado.");
-        // O ideal é chamar uma função Edge do Supabase para convidar
         const { error } = await supabase.rpc('invite_user_to_list', {
-            list_id: activeList.id,
-            invitee_email: email
+            p_list_id: activeList.id,
+            p_invitee_email: email
         });
         if (error) throw new Error(error.message);
     },
@@ -219,21 +219,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       onError: (e: any) => toast.error(e.message),
   });
 
-
   const { mutate: addItem } = useMutation({
     mutationFn: async (newItem: Partial<Omit<ListItem, 'list_id'>>) => {
       if (!user || !activeList) throw new Error("Usuário ou lista não selecionada");
       return supabase.from('items').insert([{ ...newItem, user_id: user.id, list_id: activeList.id }]).select();
     },
     onSuccess: () => {
-      toast.success("Item adicionado!");
       queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] });
     },
     onError: (e: any) => toast.error(e.message),
   });
   
-  // ... o resto das mutações permanece o mesmo
-
   const { mutate: updateItem } = useMutation({
     mutationFn: async (variables: { id: string } & Partial<ListItem>) => supabase.from('items').update(variables).eq('id', variables.id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] }),
@@ -298,7 +294,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   
   const value = {
     session, user, loadingAuth, signOut,
-    shoppingLists, isLoadingLists, activeList, switchActiveList, createList, deleteList,
+    shoppingLists, isLoadingLists, activeList, switchActiveList, createList: createListWrapper, deleteList,
     members, isLoadingMembers, inviteMember, removeMember,
     items, isLoadingItems, addItem, updateItem, deleteItem, updateItemsOrder,
     categories, isLoadingCategories, addCategory, updateCategory, deleteCategory,
