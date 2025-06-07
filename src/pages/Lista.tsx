@@ -2,12 +2,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Tag, Plus, GripVertical, MessageSquare } from "lucide-react";
+import { ArrowLeft, Tag, Plus, GripVertical, MessageSquare, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
 import { CategoryManagerDialog } from "@/components/CategoryManagerDialog";
 import { ItemCommentsDialog } from "@/components/ItemCommentsDialog";
+import { AddMemberDialog } from "@/components/AddMemberDialog"; // Importar
 import { useAppContext } from "@/context/AppContext";
 import { useShoppingListInteractions } from "@/hooks/useShoppingListInteractions";
 import { ListItem } from "@/types/shopping";
@@ -18,12 +19,13 @@ const LoadingSkeleton = () => (
 
 const Lista = () => {
     const navigate = useNavigate();
-    const { items, isLoadingItems, updateItem, deleteItem, updateItemsOrder } = useAppContext();
+    const { items, isLoadingItems, updateItem, deleteItem, updateItemsOrder, activeList, members } = useAppContext();
     
     const [showAddDialog, setShowAddDialog] = useState(false);
     const [showActionDialog, setShowActionDialog] = useState(false);
     const [showCategoryManager, setShowCategoryManager] = useState(false);
     const [showCommentsDialog, setShowCommentsDialog] = useState(false);
+    const [showMemberDialog, setShowMemberDialog] = useState(false); // Estado para o novo diálogo
     const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
     
     const {
@@ -32,7 +34,7 @@ const Lista = () => {
         handleDragStart, handleDragOver, handleDrop
     } = useShoppingListInteractions(items, updateItemsOrder);
     
-    if (isLoadingItems) return <LoadingSkeleton />;
+    if (isLoadingItems || !activeList) return <LoadingSkeleton />;
 
     const handleItemClick = (item: ListItem) => {
         setSelectedItem(item);
@@ -49,8 +51,17 @@ const Lista = () => {
             <header className="bg-white shadow-sm border-b sticky top-0 z-10">
                 <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
                     <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
-                    <h1 className="text-lg font-bold">Lista de Compras</h1>
-                    <Button variant="outline" size="sm" onClick={() => setShowCategoryManager(true)}><Tag className="h-4 w-4 mr-2"/>Categorias</Button>
+                    <h1 className="text-lg font-bold truncate" title={activeList.name}>{activeList.name}</h1>
+                    <div className="flex items-center gap-1">
+                        <Button variant="outline" size="sm" onClick={() => setShowMemberDialog(true)}>
+                            <Users className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">{members.length}</span>
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setShowCategoryManager(true)}>
+                            <Tag className="h-4 w-4 sm:mr-2"/>
+                            <span className="hidden sm:inline">Categorias</span>
+                        </Button>
+                    </div>
                 </div>
             </header>
 
@@ -61,7 +72,6 @@ const Lista = () => {
                 </div>
 
                 <div className="space-y-4">
-                    {/* CORREÇÃO: A iteração agora funciona para ambos os casos */}
                     {Object.entries(groupedItems).map(([groupKey, groupItems]) => (
                         <div key={groupKey}>
                             {groupBy === 'category' && groupKey !== 'all' && <h2 className="font-semibold text-gray-700 mb-2 flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${getCategoryColor(groupKey)}`} />{getCategoryName(groupKey)}</h2>}
@@ -92,6 +102,8 @@ const Lista = () => {
             {selectedItem && <ItemActionDialog open={showActionDialog} onOpenChange={setShowActionDialog} item={selectedItem} onUpdateItem={updateItem} onDeleteItem={deleteItem} />}
             {selectedItem && <ItemCommentsDialog open={showCommentsDialog} onOpenChange={setShowCommentsDialog} item={selectedItem} />}
             <CategoryManagerDialog open={showCategoryManager} onOpenChange={setShowCategoryManager} />
+            {/* Adicionar o novo diálogo */}
+            <AddMemberDialog open={showMemberDialog} onOpenChange={setShowMemberDialog} />
         </div>
     );
 };

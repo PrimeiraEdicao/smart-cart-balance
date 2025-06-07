@@ -6,22 +6,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { BookTemplate, Plus, Trash2 } from "lucide-react";
-import { ListTemplate, ListItem } from "@/types/shopping";
+import { ListTemplate, ListItem, TemplateItem } from "@/types/shopping"; // Importar TemplateItem
 import { toast } from "sonner";
+import { useAppContext } from "@/context/AppContext";
 
 interface ListTemplateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  currentItems: ListItem[];
-  onCreateFromTemplate: (template: ListTemplate) => void;
 }
 
-export const ListTemplateDialog = ({ 
-  open, 
-  onOpenChange, 
-  currentItems, 
-  onCreateFromTemplate 
-}: ListTemplateDialogProps) => {
+export const ListTemplateDialog = ({ open, onOpenChange }: ListTemplateDialogProps) => {
+  const { items: currentItems, addItem } = useAppContext();
   const [mode, setMode] = useState<'list' | 'create'>('list');
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
@@ -30,6 +25,13 @@ export const ListTemplateDialog = ({
     const savedTemplates = localStorage.getItem("shoppingListTemplates");
     return savedTemplates ? JSON.parse(savedTemplates) : [];
   });
+  
+  const onCreateFromTemplate = (template: ListTemplate) => {
+      template.items.forEach(item => {
+          addItem(item);
+      });
+      toast.info(`Itens do modelo "${template.name}" foram adicionados à sua lista.`);
+  };
 
   const handleSaveTemplate = () => {
     if (!templateName.trim()) {
@@ -37,6 +39,7 @@ export const ListTemplateDialog = ({
       return;
     }
 
+    // CORRIGIDO: Agora cria um array de `TemplateItem`
     const newTemplate: ListTemplate = {
       id: Date.now().toString(),
       name: templateName,
@@ -44,8 +47,6 @@ export const ListTemplateDialog = ({
       items: currentItems.map(item => ({
         name: item.name,
         quantity: item.quantity,
-        purchased: false,
-        addedBy: 'você',
         categoryId: item.categoryId
       }))
     };
@@ -63,7 +64,6 @@ export const ListTemplateDialog = ({
   const handleUseTemplate = (template: ListTemplate) => {
     onCreateFromTemplate(template);
     onOpenChange(false);
-    toast.info(`Itens do modelo "${template.name}" foram adicionados à sua lista.`);
   };
 
   const handleDeleteTemplate = (templateId: string) => {
@@ -85,7 +85,7 @@ export const ListTemplateDialog = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
+        <div className="flex-1 overflow-y-auto space-y-4 min-h-0 p-1">
           {mode === 'list' && (
             <>
               <div className="flex space-x-2">
@@ -204,7 +204,7 @@ export const ListTemplateDialog = ({
         </div>
 
         {mode === 'list' && (
-          <div className="border-t pt-4">
+          <div className="border-t pt-4 mt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">
               Fechar
             </Button>

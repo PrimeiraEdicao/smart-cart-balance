@@ -1,10 +1,9 @@
-
 export interface Category {
   id: string;
   name: string;
   color: string;
   budget?: number;
-  user_id?: string; // Adicionar para consistência com o DB
+  user_id?: string;
 }
 
 export interface ListItem {
@@ -14,22 +13,21 @@ export interface ListItem {
   purchased: boolean;
   price?: number;
   addedBy?: string;
-  comments?: Comment[]; // Opcional, já que vamos buscar separadamente
+  comments?: Comment[];
   categoryId?: string;
-  purchaseDate?: Date | string; // Datas do Supabase vêm como string
+  purchaseDate?: Date | string;
   order?: number;
-  // Campos do DB que não precisamos sempre no front-end
   user_id?: string;
   created_at?: string;
+  list_id: string; 
 }
 
-// CORREÇÃO PRINCIPAL AQUI
 export interface Comment {
   id: string;
   text: string;
-  item_id: string; // Adicionar para referência
-  user_id: string; // Adicionar para referência
-  created_at: string; // Mudar de 'timestamp' para 'created_at' e de Date para string
+  item_id: string;
+  user_id: string;
+  created_at: string;
 }
 
 export interface PriceEntry {
@@ -38,10 +36,17 @@ export interface PriceEntry {
   store?: string;
 }
 
+// NOVO TIPO: Um item simplificado para uso em modelos.
+export interface TemplateItem {
+  name: string;
+  quantity: number;
+  categoryId?: string;
+}
+
 export interface ListTemplate {
   id: string;
   name: string;
-  items: Omit<ListItem, 'id' | 'purchased' | 'price' | 'purchaseDate'>[];
+  items: TemplateItem[]; // ATUALIZADO: Usa o novo tipo TemplateItem.
   description?: string;
   categoryBudgets?: { categoryId: string; budget: number }[];
 }
@@ -49,21 +54,22 @@ export interface ListTemplate {
 export interface ShoppingList {
   id: string;
   name: string;
-  items: ListItem[];
-  budget: number;
-  categoryBudgets: { categoryId: string; budget: number }[];
-  createdAt: Date;
-  updatedAt: Date;
+  owner_id: string;
+  created_at: string;
   members?: ListMember[];
-  isShared?: boolean;
 }
 
 export interface ListMember {
-  id: string;
-  name: string;
-  email: string;
+  list_id: string;
+  user_id: string;
   role: 'owner' | 'member';
-  joinedAt: Date;
+  user_profile?: {
+    email?: string;
+    raw_user_meta_data?: {
+      name?: string;
+      avatar_url?: string;
+    }
+  }
 }
 
 export interface Notification {
