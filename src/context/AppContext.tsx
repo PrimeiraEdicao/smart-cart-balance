@@ -17,7 +17,8 @@ interface AppContextType {
   isLoadingLists: boolean;
   activeList: ShoppingList | null;
   switchActiveList: (list: ShoppingList | null) => void;
-  createList: (name: string, onSuccess?: (newList: ShoppingList) => void) => void;
+  createList: (name: string) => void;
+  updateList: (listId: string, newName: string) => void; // Adicionada função de update
   deleteList: (listId: string) => void;
 
   members: ListMember[];
@@ -85,6 +86,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setActiveListId(list?.id ?? null);
   };
 
+  // ... (código das queries de members, items, categories, etc. permanece o mesmo) ...
   const { data: members = [], isLoading: isLoadingMembers } = useQuery({
     queryKey: ['members', activeList?.id],
     queryFn: async () => {
@@ -94,15 +96,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             .select('*, user_profile:profiles(id, email, raw_user_meta_data)')
             .eq('list_id', activeList.id);
         if (error) throw error;
-        // Mapeamento para ajustar a estrutura do `user_profile`
         return (data || []).map(member => ({
             ...member,
-            user_id: (member.user_profile as any)?.id ?? member.user_id, // Garante que o user_id seja o do perfil
-            user_profile: member.user_profile || { email: 'Convidado' } // Fallback
+            user_id: (member.user_profile as any)?.id ?? member.user_id,
+            user_profile: member.user_profile || { email: 'Convidado' }
         }));
     },
     enabled: !!activeList,
-});
+  });
 
   const { data: items = [], isLoading: isLoadingItems } = useQuery({
     queryKey: ['items', activeList?.id],
@@ -148,11 +149,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return useQuery({
       queryKey: ['price_history', itemId],
       queryFn: async () => {
-        const { data, error } = await supabase
-          .from('price_history')
-          .select('*')
-          .eq('item_id', itemId)
-          .order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('price_history').select('*').eq('item_id', itemId).order('created_at', { ascending: false });
         if (error) throw error;
         return data.map(entry => ({ ...entry, date: new Date(entry.created_at) })) || [];
       },
@@ -160,141 +157,158 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  // --- MUTATIONS ---
   const { mutate: createList } = useMutation({
-    mutationFn: async ({ name }: { name: string }) => {
-        if (!user) throw new Error("Usuário não autenticado");
-        const { data, error } = await supabase.rpc('create_new_list', { list_name: name });
-        if (error) throw error;
-        // Retorna o primeiro (e único) item do resultado do RPC
-        return data[0] as ShoppingList;
+    mutationFn: async (name: string) => {
+      if (!user) throw new Error("Usuário não autenticado");
+      const { data, error } = await supabase.rpc('create_new_list', { list_name: name });
+      if (error) throw error;
+      return data[0] as ShoppingList;
     },
     onSuccess: (newList) => {
-        toast.success(`Lista "${newList.name}" criada!`);
+      toast.success(`Lista "${newList.name}" criada!`);
+      // CORREÇÃO: Atualiza o cache imediatamente
+      queryClient.setQueryData(['shoppingLists', user?.id], (oldData: ShoppingList[] | undefined) => {
+          return oldData ? [...oldData, newList] : [newList];
+      });
+      // Define a nova lista como ativa
+      switchActiveList(newList);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  // NOVA MUTATION
+  const { mutate: updateList } = useMutation({
+      mutationFn: async ({ listId, newName }: { listId: string, newName: string }) => {
+          const { error } = await supabase.from('shopping_lists').update({ name: newName }).eq('id', listId);
+          if (error) throw error;
+      },
+      onSuccess: () => {
+          toast.success("Nome da lista atualizado.");
+          queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
+      },
+      onError: (e: any) => toast.error(e.message),
+  });
+
+  // ... (código das outras mutações permanece o mesmo) ...
+
+  const { mutate: deleteList } = useMutation({
+    mutationFn: async (listId: string) => supabase.from('shopping_lists').delete().eq('id', listId),
+    onSuccess: () => {
+        toast.error("Lista removida.");
         queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
-        // ATUALIZADO: Define a nova lista como ativa
-        switchActiveList(newList);
+        setActiveListId(null);
     },
     onError: (e: any) => toast.error(e.message),
 });
 
-  const createListWrapper = (name: string) => {
-    createList({ name });
-  };
+const { mutate: inviteMember } = useMutation({
+  mutationFn: async (email: string) => {
+      if (!activeList || !user) throw new Error("Nenhuma lista ativa ou usuário não autenticado.");
+      // O ideal é chamar uma função Edge do Supabase para convidar
+      const { error } = await supabase.rpc('invite_user_to_list', {
+          p_list_id: activeList.id,
+          p_invitee_email: email
+      });
+      if (error) throw new Error(error.message);
+  },
+  onSuccess: (_, email) => {
+      toast.success(`Convite enviado para ${email}!`);
+      queryClient.invalidateQueries({ queryKey: ['members', activeList?.id] });
+  },
+  onError: (e: any) => toast.error(e.message),
+});
 
-  const { mutate: deleteList } = useMutation({
-      mutationFn: async (listId: string) => supabase.from('shopping_lists').delete().eq('id', listId),
-      onSuccess: () => {
-          toast.error("Lista removida.");
-          queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
-          setActiveListId(null);
-      },
-      onError: (e: any) => toast.error(e.message),
-  });
-
-  const { mutate: inviteMember } = useMutation({
-    mutationFn: async (email: string) => {
-        if (!activeList || !user) throw new Error("Nenhuma lista ativa ou usuário não autenticado.");
-        const { error } = await supabase.rpc('invite_user_to_list', {
-            p_list_id: activeList.id,
-            p_invitee_email: email
-        });
-        if (error) throw new Error(error.message);
+const { mutate: removeMember } = useMutation({
+    mutationFn: async (userId: string) => {
+        if (!activeList) throw new Error("Nenhuma lista ativa.");
+        return supabase.from('list_members').delete().eq('list_id', activeList.id).eq('user_id', userId);
     },
-    onSuccess: (_, email) => {
-        toast.success(`Convite enviado para ${email}!`);
+    onSuccess: () => {
+        toast.info("Membro removido.");
         queryClient.invalidateQueries({ queryKey: ['members', activeList?.id] });
     },
     onError: (e: any) => toast.error(e.message),
-  });
+});
 
-  const { mutate: removeMember } = useMutation({
-      mutationFn: async (userId: string) => {
-          if (!activeList) throw new Error("Nenhuma lista ativa.");
-          return supabase.from('list_members').delete().eq('list_id', activeList.id).eq('user_id', userId);
-      },
-      onSuccess: () => {
-          toast.info("Membro removido.");
-          queryClient.invalidateQueries({ queryKey: ['members', activeList?.id] });
-      },
-      onError: (e: any) => toast.error(e.message),
-  });
 
-  const { mutate: addItem } = useMutation({
-    mutationFn: async (newItem: Partial<Omit<ListItem, 'list_id'>>) => {
-      if (!user || !activeList) throw new Error("Usuário ou lista não selecionada");
-      return supabase.from('items').insert([{ ...newItem, user_id: user.id, list_id: activeList.id }]).select();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] });
-    },
-    onError: (e: any) => toast.error(e.message),
-  });
-  
-  const { mutate: updateItem } = useMutation({
-    mutationFn: async (variables: { id: string } & Partial<ListItem>) => supabase.from('items').update(variables).eq('id', variables.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] }),
-    onError: (e: any) => toast.error(e.message),
-  });
-  
-  const { mutate: deleteItem } = useMutation({
-    mutationFn: async (id: string) => supabase.from('items').delete().eq('id', id),
-    onSuccess: () => {
-      toast.error("Item removido.");
-      queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] });
+const { mutate: addItem } = useMutation({
+  mutationFn: async (newItem: Partial<Omit<ListItem, 'list_id'>>) => {
+    if (!user || !activeList) throw new Error("Usuário ou lista não selecionada");
+    return supabase.from('items').insert([{ ...newItem, user_id: user.id, list_id: activeList.id }]).select();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] });
+  },
+  onError: (e: any) => toast.error(e.message),
+});
+
+const { mutate: updateItem } = useMutation({
+  mutationFn: async (variables: { id: string } & Partial<ListItem>) => supabase.from('items').update(variables).eq('id', variables.id),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] }),
+  onError: (e: any) => toast.error(e.message),
+});
+
+const { mutate: deleteItem } = useMutation({
+  mutationFn: async (id: string) => supabase.from('items').delete().eq('id', id),
+  onSuccess: () => {
+    toast.error("Item removido.");
+    queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] });
+  },
+  onError: (e: any) => toast.error(e.message),
+});
+
+const { mutate: updateItemsOrder } = useMutation({
+    mutationFn: async (orderedItems: ListItem[]) => {
+        const updates = orderedItems.map(item => ({ id: item.id, order: item.order }));
+        return supabase.from('items').upsert(updates);
     },
     onError: (e: any) => toast.error(e.message),
-  });
+});
 
-  const { mutate: updateItemsOrder } = useMutation({
-      mutationFn: async (orderedItems: ListItem[]) => {
-          const updates = orderedItems.map(item => ({ id: item.id, order: item.order }));
-          return supabase.from('items').upsert(updates);
-      },
-      onError: (e: any) => toast.error(e.message),
-  });
-
-  const { mutate: addCategory } = useMutation({
-      mutationFn: async (newCategory: Omit<Category, 'id' | 'user_id'>) => {
-          if (!user) throw new Error("Usuário não autenticado");
-          return supabase.from('categories').insert([{ ...newCategory, user_id: user.id }]);
-      },
-      onSuccess: () => {
-          toast.success("Categoria adicionada!");
-          queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
-      },
-      onError: (e: any) => toast.error(e.message),
-  });
-
-  const { mutate: updateCategory } = useMutation({
-      mutationFn: async (variables: { id: string } & Partial<Category>) => supabase.from('categories').update(variables).eq('id', variables.id),
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories', user?.id] }),
-      onError: (e: any) => toast.error(e.message),
-  });
-
-  const { mutate: deleteCategory } = useMutation({
-      mutationFn: async (id: string) => supabase.from('categories').delete().eq('id', id),
-      onSuccess: () => {
-          toast.error("Categoria removida.");
-          queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
-      },
-      onError: (e: any) => toast.error(e.message),
-  });
-  
-  const { mutate: addComment } = useMutation({
-    mutationFn: async (newComment: { item_id: string, text: string }) => {
+const { mutate: addCategory } = useMutation({
+    mutationFn: async (newCategory: Omit<Category, 'id' | 'user_id'>) => {
         if (!user) throw new Error("Usuário não autenticado");
-        return supabase.from('comments').insert([{ ...newComment, user_id: user.id }]);
+        return supabase.from('categories').insert([{ ...newCategory, user_id: user.id }]);
     },
-    onSuccess: (_, variables) => {
-        toast.success("Comentário adicionado!");
-        queryClient.invalidateQueries({ queryKey: ['comments', variables.item_id] });
+    onSuccess: () => {
+        toast.success("Categoria adicionada!");
+        queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
     },
     onError: (e: any) => toast.error(e.message),
-  });
-  
+});
+
+const { mutate: updateCategory } = useMutation({
+    mutationFn: async (variables: { id: string } & Partial<Category>) => supabase.from('categories').update(variables).eq('id', variables.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories', user?.id] }),
+    onError: (e: any) => toast.error(e.message),
+});
+
+const { mutate: deleteCategory } = useMutation({
+    mutationFn: async (id: string) => supabase.from('categories').delete().eq('id', id),
+    onSuccess: () => {
+        toast.error("Categoria removida.");
+        queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
+    },
+    onError: (e: any) => toast.error(e.message),
+});
+
+const { mutate: addComment } = useMutation({
+  mutationFn: async (newComment: { item_id: string, text: string }) => {
+      if (!user) throw new Error("Usuário não autenticado");
+      return supabase.from('comments').insert([{ ...newComment, user_id: user.id }]);
+  },
+  onSuccess: (_, variables) => {
+      toast.success("Comentário adicionado!");
+      queryClient.invalidateQueries({ queryKey: ['comments', variables.item_id] });
+  },
+  onError: (e: any) => toast.error(e.message),
+});
+
+
   const value = {
     session, user, loadingAuth, signOut,
-    shoppingLists, isLoadingLists, activeList, switchActiveList, createList: createListWrapper, deleteList,
+    shoppingLists, isLoadingLists, activeList, switchActiveList, createList, updateList, deleteList,
     members, isLoadingMembers, inviteMember, removeMember,
     items, isLoadingItems, addItem, updateItem, deleteItem, updateItemsOrder,
     categories, isLoadingCategories, addCategory, updateCategory, deleteCategory,
