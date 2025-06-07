@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,9 +15,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { toast } from "sonner";
 import { ListItem } from "@/types/shopping";
+import { cn } from "@/lib/utils";
+
 
 interface AddItemDialogProps {
   open: boolean;
@@ -25,10 +30,23 @@ interface AddItemDialogProps {
 }
 
 export const AddItemDialog = ({ open, onOpenChange }: AddItemDialogProps) => {
-  const { addItem, categories } = useAppContext();
+  const { addItem, categories, getHistoricItemNames } = useAppContext();
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+
+  // Busca os nomes dos itens do histórico
+  const { data: historicNames = [] } = getHistoricItemNames();
+
+  useEffect(() => {
+    // Reseta o estado quando o diálogo é fechado
+    if (!open) {
+      setName("");
+      setQuantity("1");
+      setCategoryId(undefined);
+    }
+  }, [open]);
 
   const handleAddItem = () => {
     if (!name.trim()) {
@@ -40,15 +58,11 @@ export const AddItemDialog = ({ open, onOpenChange }: AddItemDialogProps) => {
       name: name.trim(),
       quantity: parseInt(quantity, 10) || 1,
       purchased: false,
-      addedBy: 'Você', // Ou o nome do usuário logado
-      categoryId: categoryId,
+      categoryId: categoryId === "none" ? undefined : categoryId,
     };
 
     addItem(newItem);
-    onOpenChange(false);
-    setName("");
-    setQuantity("1");
-    setCategoryId(undefined);
+    onOpenChange(false); // Fecha o diálogo
   };
 
   return (
@@ -57,16 +71,49 @@ export const AddItemDialog = ({ open, onOpenChange }: AddItemDialogProps) => {
         <DialogHeader>
           <DialogTitle>Adicionar Novo Item</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 py-2">
           <div>
             <Label htmlFor="name">Nome do Item</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Leite Integral"
-              className="mt-1"
-            />
+            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                <PopoverTrigger asChild>
+                    <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={popoverOpen}
+                        className="w-full justify-between mt-1 font-normal"
+                    >
+                        {name || "Selecione ou digite um item..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command>
+                        <CommandInput 
+                          placeholder="Buscar ou criar item..."
+                          value={name}
+                          onValueChange={setName}
+                        />
+                        <CommandList>
+                            <CommandEmpty>Nenhum item encontrado. Pressione Enter para criar.</CommandEmpty>
+                            <CommandGroup>
+                                {historicNames.map((historicName) => (
+                                    <CommandItem
+                                        key={historicName}
+                                        value={historicName}
+                                        onSelect={(currentValue) => {
+                                            setName(currentValue === name ? "" : currentValue);
+                                            setPopoverOpen(false);
+                                        }}
+                                    >
+                                        <Check className={cn("mr-2 h-4 w-4", name === historicName ? "opacity-100" : "opacity-0")} />
+                                        {historicName}
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </CommandList>
+                    </Command>
+                </PopoverContent>
+            </Popover>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -97,7 +144,7 @@ export const AddItemDialog = ({ open, onOpenChange }: AddItemDialogProps) => {
               </Select>
             </div>
           </div>
-          <div className="flex space-x-2">
+          <div className="flex space-x-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
               Cancelar
             </Button>

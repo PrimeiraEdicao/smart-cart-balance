@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery, QueryKey } fro
 import { defaultCategories } from '@/data/categories';
 import usePersistentState from '@/hooks/usePersistentState';
 
-// Interface do Contexto (atualizada para infinite scroll)
+// Interface do Contexto (atualizada para infinite scroll e sugestões)
 interface AppContextType {
   session: Session | null;
   user: User | null;
@@ -44,6 +44,8 @@ interface AppContextType {
   getComments: (itemId: string) => { data: Comment[], isLoading: boolean };
   addComment: (comment: { item_id: string, text: string }) => void;
   getPriceHistory: (itemId: string) => { data: PriceEntry[], isLoading: boolean };
+  // ✅ NOVA FUNÇÃO PARA SUGESTÕES
+  getHistoricItemNames: () => { data: string[], isLoading: boolean };
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -75,7 +77,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     queryClient.clear();
   };
 
-  // ✅ CORREÇÃO AQUI: A query de listas é definida separadamente
   const { data: shoppingLists = [], isLoading: isLoadingLists } = useQuery({
     queryKey: ['shoppingLists', user?.id],
     queryFn: async () => {
@@ -141,8 +142,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       supabase.removeChannel(channel);
     };
   }, [activeList, queryClient]);
-
-  // ... (restante do código, sem alterações)
+  
   const { data: members = [], isLoading: isLoadingMembers } = useQuery({
     queryKey: ['members', activeList?.id],
     queryFn: async () => {
@@ -169,6 +169,35 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return data;
     },
     enabled: !!user,
+  });
+
+  // ✅ NOVA QUERY PARA BUSCAR NOMES HISTÓRICOS DE ITENS
+  const { data: historicItemNames = [], isLoading: isLoadingHistoricItemNames } = useQuery({
+    queryKey: ['historicItemNames', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('items')
+        .select('name')
+        .eq('user_id', user.id)
+        .limit(1000); // Limite para evitar sobrecarga
+
+      if (error) {
+        console.error("Erro ao buscar nomes de itens históricos:", error);
+        return [];
+      }
+
+      // Processa para obter nomes únicos
+      const names = data.map(item => item.name);
+      return [...new Set(names)];
+    },
+    enabled: !!user,
+    staleTime: 1000 * 60 * 60, // Cache de 1 hora
+  });
+
+  const getHistoricItemNames = () => ({
+      data: historicItemNames,
+      isLoading: isLoadingHistoricItemNames
   });
 
   const getComments = (itemId: string) => {
@@ -362,7 +391,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     items, isLoadingItems, fetchNextPage, hasNextPage, isFetchingNextPage,
     addItem, updateItem, deleteItem, updateItemsOrder, deletePurchaseHistory,
     categories, isLoadingCategories, addCategory, updateCategory, deleteCategory,
-    getComments, addComment, getPriceHistory,
+    getComments, addComment, getPriceHistory, getHistoricItemNames,
   };
 
   return <AppContext.Provider value={value as any}>{children}</AppContext.Provider>;
