@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Tag, Plus, GripVertical, MessageSquare, Users } from "lucide-react";
+import { ArrowLeft, Tag, Plus, GripVertical, MessageSquare, Users, Camera } from "lucide-react"; // 1. Importar Camera
 import { useNavigate } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
 import { CategoryManagerDialog } from "@/components/CategoryManagerDialog";
 import { ItemCommentsDialog } from "@/components/ItemCommentsDialog";
-import { AddMemberDialog } from "@/components/AddMemberDialog"; // Importar
+import { AddMemberDialog } from "@/components/AddMemberDialog";
+import { ScanAddDialog } from "@/components/ScanAddDialog"; // 2. Importar o novo diálogo
 import { useAppContext } from "@/context/AppContext";
 import { useShoppingListInteractions } from "@/hooks/useShoppingListInteractions";
 import { ListItem } from "@/types/shopping";
@@ -21,11 +22,13 @@ const Lista = () => {
     const navigate = useNavigate();
     const { items, isLoadingItems, updateItem, deleteItem, updateItemsOrder, activeList, members } = useAppContext();
     
+    // 3. Adicionar estados para os novos diálogos
     const [showAddDialog, setShowAddDialog] = useState(false);
+    const [showScanAddDialog, setShowScanAddDialog] = useState(false);
     const [showActionDialog, setShowActionDialog] = useState(false);
     const [showCategoryManager, setShowCategoryManager] = useState(false);
     const [showCommentsDialog, setShowCommentsDialog] = useState(false);
-    const [showMemberDialog, setShowMemberDialog] = useState(false); // Estado para o novo diálogo
+    const [showMemberDialog, setShowMemberDialog] = useState(false); 
     const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
     
     const {
@@ -52,7 +55,11 @@ const Lista = () => {
                 <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
                     <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
                     <h1 className="text-lg font-bold truncate" title={activeList.name}>{activeList.name}</h1>
+                    {/* 4. Adicionar botão de Scan */}
                     <div className="flex items-center gap-1">
+                        <Button variant="outline" size="icon" onClick={() => setShowScanAddDialog(true)}>
+                            <Camera className="h-4 w-4" />
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => setShowMemberDialog(true)}>
                             <Users className="h-4 w-4 sm:mr-2" />
                             <span className="hidden sm:inline">{members.length}</span>
@@ -98,11 +105,12 @@ const Lista = () => {
 
             <Button className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 text-white shadow-lg" onClick={() => setShowAddDialog(true)}><Plus className="h-6 w-6" /></Button>
 
+            {/* 5. Renderizar os diálogos */}
             <AddItemDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
+            <ScanAddDialog open={showScanAddDialog} onOpenChange={setShowScanAddDialog} />
             {selectedItem && <ItemActionDialog open={showActionDialog} onOpenChange={setShowActionDialog} item={selectedItem} onUpdateItem={updateItem} onDeleteItem={deleteItem} />}
             {selectedItem && <ItemCommentsDialog open={showCommentsDialog} onOpenChange={setShowCommentsDialog} item={selectedItem} />}
             <CategoryManagerDialog open={showCategoryManager} onOpenChange={setShowCategoryManager} />
-            {/* Adicionar o novo diálogo */}
             <AddMemberDialog open={showMemberDialog} onOpenChange={setShowMemberDialog} />
         </div>
     );
