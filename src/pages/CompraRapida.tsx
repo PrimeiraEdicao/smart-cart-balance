@@ -3,22 +3,22 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Camera } from "lucide-react";
+import { ArrowLeft, Camera, PiggyBank } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { QuickPurchaseDialog } from "@/components/QuickPurchaseDialog";
 import { useAppContext } from "@/context/AppContext";
 import { Skeleton } from "@/components/ui/skeleton";
-
-// A interface QuickPurchaseItem não é mais necessária, usaremos ListItem do context
+import usePersistentState from "@/hooks/usePersistentState";
+import { toast } from "sonner";
 
 const CompraRapida = () => {
   const navigate = useNavigate();
   const [showPurchaseDialog, setShowPurchaseDialog] = useState(false);
-  
-  // Hooks devem ser chamados dentro do corpo do componente
   const { items: allItems, isLoadingItems } = useAppContext();
+  
+  // Usando o hook para persistir o orçamento
+  const [totalBudget, setTotalBudget] = usePersistentState<number>('quickBuyBudget', 500);
 
-  // Filtra a lista para mostrar apenas itens comprados hoje
   const purchasedToday = useMemo(() => {
     const today = new Date().toDateString();
     return allItems.filter(item => 
@@ -28,13 +28,21 @@ const CompraRapida = () => {
     );
   }, [allItems]);
   
-  // Calcula o total gasto baseado nos itens reais filtrados
   const totalSpent = useMemo(() => {
     return purchasedToday.reduce((sum, item) => sum + (item.price! * item.quantity), 0);
   }, [purchasedToday]);
 
-  // Saldo restante ainda usa um valor fixo (500). Isso pode ser melhorado no futuro.
-  const remainingBalance = 500 - totalSpent;
+  const remainingBalance = totalBudget - totalSpent;
+
+  const handleSetBudget = () => {
+    const newBudget = prompt("Defina o orçamento total para esta compra:", totalBudget.toString());
+    if (newBudget !== null && !isNaN(parseFloat(newBudget))) {
+      setTotalBudget(parseFloat(newBudget));
+      toast.success("Orçamento atualizado!");
+    } else if (newBudget !== null) {
+      toast.error("Valor inválido. Insira apenas números.");
+    }
+  };
 
   if (isLoadingItems) {
     return (
@@ -48,7 +56,6 @@ const CompraRapida = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100">
-      {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-md mx-auto px-4 py-4 flex items-center space-x-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
@@ -59,7 +66,6 @@ const CompraRapida = () => {
       </div>
 
       <div className="max-w-md mx-auto px-4 py-6">
-        {/* Purchase Summary */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0">
             <CardContent className="p-4 text-center">
@@ -67,15 +73,20 @@ const CompraRapida = () => {
               <div className="text-xl font-bold">R$ {totalSpent.toFixed(2)}</div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-r from-green-600 to-emerald-600 text-white border-0">
+          <Card 
+            className="bg-gradient-to-r from-green-600 to-emerald-600 text-white border-0 cursor-pointer hover:opacity-90"
+            onClick={handleSetBudget}
+          >
             <CardContent className="p-4 text-center">
-              <div className="text-sm text-green-100 mb-1">Saldo Restante</div>
+              <div className="flex items-center justify-center text-sm text-green-100 mb-1">
+                Saldo Restante
+                <PiggyBank className="h-4 w-4 ml-2" />
+              </div>
               <div className="text-xl font-bold">R$ {remainingBalance.toFixed(2)}</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Items List */}
         <div className="space-y-3">
           <h2 className="text-lg font-semibold text-gray-800 mb-3">Produtos Registrados Hoje</h2>
           {purchasedToday.map((item) => (
@@ -103,21 +114,19 @@ const CompraRapida = () => {
           <div className="text-center py-12">
             <Camera className="h-16 w-16 text-gray-300 mx-auto mb-4" />
             <div className="text-gray-400 text-lg mb-2">Nenhum produto registrado hoje</div>
-            <div className="text-gray-500 text-sm">Use o botão + para escanear e adicionar um produto</div>
+            <div className="text-gray-500 text-sm">Use o botão de Scan para adicionar um produto</div>
           </div>
         )}
 
-        {/* Instructions */}
         <Card className="mt-6 bg-yellow-50 border-yellow-200">
           <CardContent className="p-4">
             <div className="text-sm text-yellow-800">
-              <strong>💡 Dica:</strong> Toque no botão + para escanear o código de barras dos produtos e adicionar automaticamente à sua compra.
+              <strong>💡 Dica:</strong> Clique no card de "Saldo Restante" para definir seu orçamento total para esta compra.
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Floating Scan Button */}
       <Button
         className="fixed bottom-6 right-6 h-16 w-16 rounded-full bg-green-600 hover:bg-green-700 shadow-lg"
         onClick={() => setShowPurchaseDialog(true)}
@@ -128,7 +137,6 @@ const CompraRapida = () => {
         </div>
       </Button>
 
-      {/* A prop 'onAddItem' foi removida */}
       <QuickPurchaseDialog
         open={showPurchaseDialog}
         onOpenChange={setShowPurchaseDialog}

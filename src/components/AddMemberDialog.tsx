@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, UserPlus, Mail, Crown, Trash2, UserCheck } from "lucide-react";
+import { Users, UserPlus, Crown, Trash2, UserCheck } from "lucide-react";
 import { ListMember } from "@/types/shopping";
+import { useAppContext } from "@/context/AppContext";
+import { toast } from "sonner";
 
 interface AddMemberDialogProps {
   open: boolean;
@@ -15,24 +17,21 @@ interface AddMemberDialogProps {
 }
 
 export const AddMemberDialog = ({ open, onOpenChange }: AddMemberDialogProps) => {
+  const { user } = useAppContext();
   const [email, setEmail] = useState("");
-  const [inviteCode, setInviteCode] = useState("LISTA-2024-ABC123");
-  
-  // Mock members - em um app real, isso viria de uma API
-  const [members, setMembers] = useState<ListMember[]>([
-    { id: '1', name: 'Você', email: 'voce@email.com', role: 'owner', joinedAt: new Date() },
-    { id: '2', name: 'João', email: 'joao@email.com', role: 'member', joinedAt: new Date('2024-04-01') },
-    { id: '3', name: 'Maria', email: 'maria@email.com', role: 'member', joinedAt: new Date('2024-04-05') },
-  ]);
+  const [inviteCode] = useState("LISTA-2024-ABC123");
 
-  const [notifications] = useState([
-    { id: '1', message: 'João adicionou "Leite" à lista', timestamp: new Date(), read: false },
-    { id: '2', message: 'Maria comprou "Açúcar"', timestamp: new Date(Date.now() - 3600000), read: false },
-    { id: '3', message: 'João comentou em "Arroz"', timestamp: new Date(Date.now() - 7200000), read: true },
+  // Mock de membros para fins de demonstração
+  const [members, setMembers] = useState<ListMember[]>([
+    { id: '1', name: 'Você', email: user?.email || "", role: 'owner', joinedAt: new Date() },
+    { id: '2', name: 'João', email: 'joao@email.com', role: 'member', joinedAt: new Date('2024-04-01') },
   ]);
 
   const handleInviteMember = () => {
-    if (!email.trim()) return;
+    if (!email.trim()) {
+      toast.error("Por favor, insira um e-mail válido.");
+      return;
+    }
 
     const newMember: ListMember = {
       id: Date.now().toString(),
@@ -45,17 +44,17 @@ export const AddMemberDialog = ({ open, onOpenChange }: AddMemberDialogProps) =>
     setMembers([...members, newMember]);
     setEmail("");
     
-    // Simula envio de convite
-    alert(`Convite enviado para ${email}!`);
+    toast.success(`Convite enviado para ${email}!`);
   };
 
   const handleRemoveMember = (memberId: string) => {
     setMembers(members.filter(m => m.id !== memberId));
+    toast.info("Membro removido.");
   };
 
   const handleCopyInviteCode = () => {
     navigator.clipboard.writeText(inviteCode);
-    alert('Código de convite copiado!');
+    toast.success('Código de convite copiado!');
   };
 
   const formatDate = (date: Date) => {
@@ -66,8 +65,6 @@ export const AddMemberDialog = ({ open, onOpenChange }: AddMemberDialogProps) =>
     }).format(date);
   };
 
-  const unreadNotifications = notifications.filter(n => !n.read).length;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[80vh] overflow-hidden flex flex-col">
@@ -75,32 +72,10 @@ export const AddMemberDialog = ({ open, onOpenChange }: AddMemberDialogProps) =>
           <DialogTitle className="flex items-center space-x-2">
             <Users className="h-5 w-5 text-purple-600" />
             <span>Gerenciar Membros</span>
-            {unreadNotifications > 0 && (
-              <div className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {unreadNotifications}
-              </div>
-            )}
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
-          {/* Notifications */}
-          {unreadNotifications > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="text-sm font-medium text-blue-800 mb-2">
-                Atividades Recentes ({unreadNotifications})
-              </div>
-              <div className="space-y-2">
-                {notifications.filter(n => !n.read).slice(0, 3).map((notification) => (
-                  <div key={notification.id} className="text-xs text-blue-700">
-                    • {notification.message}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Add Member */}
           <div className="space-y-3">
             <div className="text-sm font-medium text-gray-700">Adicionar Membro</div>
             
@@ -138,7 +113,6 @@ export const AddMemberDialog = ({ open, onOpenChange }: AddMemberDialogProps) =>
             </div>
           </div>
 
-          {/* Members List */}
           <div className="space-y-3">
             <div className="text-sm font-medium text-gray-700">
               Membros da Lista ({members.length})

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -6,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { BookTemplate, Plus, Trash2, Edit } from "lucide-react";
+import { BookTemplate, Plus, Trash2 } from "lucide-react";
 import { ListTemplate, ListItem } from "@/types/shopping";
+import { toast } from "sonner";
 
 interface ListTemplateDialogProps {
   open: boolean;
@@ -22,39 +22,20 @@ export const ListTemplateDialog = ({
   currentItems, 
   onCreateFromTemplate 
 }: ListTemplateDialogProps) => {
-  const [mode, setMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [mode, setMode] = useState<'list' | 'create'>('list');
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
-  const [editingTemplate, setEditingTemplate] = useState<ListTemplate | null>(null);
 
-  // Mock templates - em um app real, isso viria de uma API ou localStorage
-  const [templates, setTemplates] = useState<ListTemplate[]>([
-    {
-      id: '1',
-      name: 'Lista Básica Semanal',
-      description: 'Itens essenciais para a semana',
-      items: [
-        { name: 'Arroz', quantity: 1, purchased: false, addedBy: 'você', categoryId: 'grains-cereals' },
-        { name: 'Feijão', quantity: 1, purchased: false, addedBy: 'você', categoryId: 'grains-cereals' },
-        { name: 'Leite', quantity: 2, purchased: false, addedBy: 'você', categoryId: 'dairy' },
-        { name: 'Pão', quantity: 1, purchased: false, addedBy: 'você', categoryId: 'bakery' },
-      ]
-    },
-    {
-      id: '2',
-      name: 'Compras do Mês',
-      description: 'Lista completa para compras mensais',
-      items: [
-        { name: 'Açúcar', quantity: 1, purchased: false, addedBy: 'você', categoryId: 'grains-cereals' },
-        { name: 'Óleo', quantity: 1, purchased: false, addedBy: 'você', categoryId: 'other' },
-        { name: 'Carne', quantity: 2, purchased: false, addedBy: 'você', categoryId: 'meat-fish' },
-        { name: 'Frango', quantity: 1, purchased: false, addedBy: 'você', categoryId: 'meat-fish' },
-      ]
-    }
-  ]);
+  const [templates, setTemplates] = useState<ListTemplate[]>(() => {
+    const savedTemplates = localStorage.getItem("shoppingListTemplates");
+    return savedTemplates ? JSON.parse(savedTemplates) : [];
+  });
 
   const handleSaveTemplate = () => {
-    if (!templateName.trim()) return;
+    if (!templateName.trim()) {
+      toast.error("O nome do modelo não pode estar vazio.");
+      return;
+    }
 
     const newTemplate: ListTemplate = {
       id: Date.now().toString(),
@@ -69,19 +50,27 @@ export const ListTemplateDialog = ({
       }))
     };
 
-    setTemplates([...templates, newTemplate]);
+    const updatedTemplates = [...templates, newTemplate];
+    setTemplates(updatedTemplates);
+    localStorage.setItem("shoppingListTemplates", JSON.stringify(updatedTemplates));
+    
     setTemplateName("");
     setTemplateDescription("");
     setMode('list');
+    toast.success("Modelo salvo com sucesso!");
   };
 
   const handleUseTemplate = (template: ListTemplate) => {
     onCreateFromTemplate(template);
     onOpenChange(false);
+    toast.info(`Itens do modelo "${template.name}" foram adicionados à sua lista.`);
   };
 
   const handleDeleteTemplate = (templateId: string) => {
-    setTemplates(templates.filter(t => t.id !== templateId));
+    const updatedTemplates = templates.filter(t => t.id !== templateId);
+    setTemplates(updatedTemplates);
+    localStorage.setItem("shoppingListTemplates", JSON.stringify(updatedTemplates));
+    toast.error("Modelo removido.");
   };
 
   return (
@@ -91,8 +80,7 @@ export const ListTemplateDialog = ({
           <DialogTitle className="flex items-center space-x-2">
             <BookTemplate className="h-5 w-5 text-blue-600" />
             <span>
-              {mode === 'create' ? 'Salvar Como Modelo' : 
-               mode === 'edit' ? 'Editar Modelo' : 'Modelos de Lista'}
+              {mode === 'create' ? 'Salvar Como Modelo' : 'Modelos de Lista'}
             </span>
           </DialogTitle>
         </DialogHeader>
@@ -191,8 +179,8 @@ export const ListTemplateDialog = ({
                   Itens que serão salvos ({currentItems.length}):
                 </div>
                 <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {currentItems.map((item) => (
-                    <div key={item.id} className="text-xs text-gray-600">
+                  {currentItems.map((item, index) => (
+                    <div key={index} className="text-xs text-gray-600">
                       • {item.name} ({item.quantity})
                     </div>
                   ))}
