@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Tag, Plus, GripVertical, MessageSquare, Users, Camera, Loader2 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom"; // ✅ IMPORTAR useParams
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ScanAddDialog } from "@/components/ScanAddDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
@@ -16,7 +16,7 @@ import { ListItem } from "@/types/shopping";
 import { MemberBadge } from "@/components/MemberBadge";
 import { AssignmentBadge } from "@/components/AssignmentBadge";
 
-// ... (Componente ListItemCard memorizado - sem alterações)
+// O componente ListItemCard continua o mesmo...
 interface ListItemCardProps {
     item: ListItem;
     isDragged: boolean;
@@ -37,12 +37,10 @@ const ListItemCard = React.memo(({
     onDrop
 }: ListItemCardProps) => {
     const { members } = useAppContext();
-
     const handleCommentButtonClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         onCommentClick(item);
     };
-
     return (
         <Card
             onClick={() => onItemClick(item)}
@@ -62,10 +60,7 @@ const ListItemCard = React.memo(({
                         {item.user_id && members.length > 1 && <MemberBadge userId={item.user_id} />}
                     </div>
                 </div>
-
-                {/* ✅ Lógica para exibir o avatar de atribuição */}
                 {item.assigned_to_user_id && <AssignmentBadge userId={item.assigned_to_user_id} />}
-
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCommentButtonClick}>
                     <MessageSquare className="h-5 w-5 text-gray-600" />
                 </Button>
@@ -75,17 +70,23 @@ const ListItemCard = React.memo(({
 });
 ListItemCard.displayName = 'ListItemCard';
 
-
 const LoadingSkeleton = () => (
-    <div className="p-4"><div className="max-w-md mx-auto space-y-4"><Skeleton className="h-10 w-full" /><Skeleton className="h-24 w-full" /><Skeleton className="h-10 w-40" /><Skeleton className="h-28 w-full" /><Skeleton className="h-28 w-full" /></div></div>
+    <div className="p-4 max-w-md mx-auto space-y-4">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-10 w-40" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-28 w-full" />
+    </div>
 );
 
 const Lista = () => {
     const navigate = useNavigate();
-    const { listId } = useParams<{ listId: string }>(); // ✅ PEGAR ID DA URL
+    const { listId } = useParams<{ listId: string }>();
 
     const {
         shoppingLists,
+        isLoadingLists,
         items,
         isLoadingItems,
         fetchNextPage,
@@ -95,20 +96,20 @@ const Lista = () => {
         deleteItem,
         updateItemsOrder,
         members,
-        switchActiveList, // ✅ Usar para definir a lista ativa
+        switchActiveList,
     } = useAppContext();
 
-    // ✅ Encontrar a lista ativa baseada no ID da URL
     const activeList = shoppingLists.find(list => list.id === listId);
 
-    // ✅ Definir a lista ativa no contexto quando o ID da URL mudar
     useEffect(() => {
         if (activeList) {
             switchActiveList(activeList);
         }
+        return () => {
+            switchActiveList(null);
+        };
     }, [activeList, switchActiveList]);
 
-    // ... (states e hooks sem alterações)
     const [showAddDialog, setShowAddDialog] = useState(false);
     const [showScanAddDialog, setShowScanAddDialog] = useState(false);
     const [showActionDialog, setShowActionDialog] = useState(false);
@@ -123,10 +124,8 @@ const Lista = () => {
         handleDragStart, handleDragOver, handleDrop
     } = useShoppingListInteractions(items, updateItemsOrder);
 
-    // ✅ 2. Criar uma referência para o observador de interseção
     const observerRef = useRef<HTMLDivElement | null>(null);
 
-    // ✅ 3. Configurar o efeito para o observador
     useEffect(() => {
         const observer = new IntersectionObserver(
             (entries) => {
@@ -149,11 +148,27 @@ const Lista = () => {
         };
     }, [hasNextPage, fetchNextPage, isFetchingNextPage]);
 
-    // ✅ Atualizar a tela de carregamento e o estado de lista não encontrada
-    if (!activeList && !isLoadingItems) {
-        return <div className="p-4 text-center">Lista não encontrada ou carregando...</div>;
+    if (isLoadingLists || !listId) {
+        return <LoadingSkeleton />;
     }
-    if (isLoadingItems && items.length === 0) return <LoadingSkeleton />;
+
+    if (!activeList) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 text-center">
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-700">Lista não encontrada</h2>
+                    <p className="text-gray-500 mt-2">A lista que você está procurando não existe ou foi removida.</p>
+                    <Button asChild className="mt-4">
+                        <Link to="/listas">Voltar para minhas listas</Link>
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+    
+    if (isLoadingItems && items.length === 0) {
+        return <LoadingSkeleton />;
+    }
 
     const handleItemClick = useCallback((item: ListItem) => {
         setSelectedItem(item);
@@ -165,14 +180,14 @@ const Lista = () => {
         setShowCommentsDialog(true);
     }, []);
 
-
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Header (sem alterações) */}
             <header className="bg-white shadow-sm border-b sticky top-0 z-10">
                 <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-                    <Button variant="ghost" size="icon" onClick={() => navigate('/listas')}><ArrowLeft className="h-5 w-5" /></Button>
-                    <h1 className="text-lg font-bold truncate" title={activeList?.name}>{activeList?.name}</h1>
+                    <Button variant="ghost" size="icon" onClick={() => navigate('/listas')}>
+                        <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <h1 className="text-lg font-bold truncate" title={activeList.name}>{activeList.name}</h1>
                     <div className="flex items-center gap-1">
                         <Button variant="outline" size="icon" onClick={() => setShowScanAddDialog(true)}>
                             <Camera className="h-4 w-4" />
@@ -215,7 +230,6 @@ const Lista = () => {
                     ))}
                 </div>
 
-                {/* ✅ 4. Adicionar o gatilho e o indicador de carregamento */}
                 <div ref={observerRef} className="h-1" />
                 {isFetchingNextPage && (
                     <div className="flex justify-center items-center p-4">
@@ -230,7 +244,7 @@ const Lista = () => {
 
             <Button className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 text-white shadow-lg" onClick={() => setShowAddDialog(true)}><Plus className="h-6 w-6" /></Button>
 
-            {/* Dialogs (sem alterações) */}
+            {/* Dialogs */}
             <AddItemDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
             <ScanAddDialog open={showScanAddDialog} onOpenChange={setShowScanAddDialog} />
             {selectedItem && <ItemActionDialog open={showActionDialog} onOpenChange={setShowActionDialog} item={selectedItem} onUpdateItem={updateItem} onDeleteItem={deleteItem} />}
