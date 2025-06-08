@@ -22,6 +22,7 @@ interface AppContextType {
   createList: (name: string) => void;
   updateList: (listId: string, newName: string) => void;
   deleteList: (listId: string) => void;
+  toggleFavoriteList: (listId: string, isFavorited: boolean) => void; // ✅ NOVA FUNÇÃO
   members: ListMember[];
   isLoadingMembers: boolean;
   inviteMember: (email: string) => void;
@@ -59,7 +60,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [activeListId, setActiveListId] = usePersistentState<string | null>('activeShoppingListId', null);
+  const [activeList, setActiveList] = useState<ShoppingList | null>(null); // ✅ GERENCIAMENTO LOCAL
   const [budget, setBudget] = usePersistentState<number>('mainBudget', 1000);
 
   useEffect(() => {
@@ -68,32 +69,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       setUser(session?.user ?? null);
       setLoadingAuth(false);
       if (!session) {
-        setActiveListId(null);
+        setActiveList(null);
       }
     });
     return () => subscription.unsubscribe();
-  }, [setActiveListId]);
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
     queryClient.clear();
   };
 
+  // ✅ Query para buscar e ORDENAR as listas
   const { data: shoppingLists = [], isLoading: isLoadingLists } = useQuery({
     queryKey: ['shoppingLists', user?.id],
     queryFn: async () => {
         if (!user) return [];
         const { data, error } = await supabase.rpc('get_user_shopping_lists');
         if (error) throw error;
-        return data || [];
+        // Ordena por favoritas e depois por data de criação
+        return (data || []).sort((a, b) => {
+            if (a.is_favorited && !b.is_favorited) return -1;
+            if (!a.is_favorited && b.is_favorited) return 1;
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
     },
     enabled: !!user,
   });
 
-  const activeList = shoppingLists.find(list => list.id === activeListId) || null;
-
   const switchActiveList = (list: ShoppingList | null) => {
-    setActiveListId(list?.id ?? null);
+    setActiveList(list);
   };
   
   const { 
@@ -291,9 +296,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
       return data[0] as ShoppingList;
     },
-    onSuccess: (newList) => {
-      queryClient.setQueryData(['shoppingLists', user?.id], (oldData: ShoppingList[] | undefined) => oldData ? [...oldData, newList] : [newList]);
-      switchActiveList(newList);
+    onSuccess: () => {
+      toast.success("Nova lista criada!");
+      queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -309,13 +314,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       },
       onError: (e: any) => toast.error(e.message),
   });
+    
+  // ✅ NOVA MUTATION PARA FAVORITAR/DESFAVORITAR
+  const { mutate: toggleFavoriteList } = useMutation({
+    mutationFn: async ({ listId, isFavorited }: { listId: string, isFavorited: boolean }) => {
+        const { error } = await supabase.from('shopping_lists').update({ is_favorited: !isFavorited }).eq('id', listId);
+        if (error) throw error;
+    },
+    onSuccess: (_, { isFavorited }) => {
+        toast.success(isFavorited ? "Lista removida dos favoritos." : "Lista adicionada aos favoritos!");
+        queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const { mutate: deleteList } = useMutation({
     mutationFn: async (listId: string) => supabase.from('shopping_lists').delete().eq('id', listId),
     onSuccess: () => {
-        toast.success("Lista removida com sucesso.");
         queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
-        setActiveListId(null);
+        if (activeList?.id) {
+            switchActiveList(null);
+        }
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -447,6 +466,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     session, user, loadingAuth, signOut,
     budget, setBudget,
     shoppingLists, isLoadingLists, activeList, switchActiveList, createList, updateList, deleteList,
+    toggleFavoriteList, // ✅ EXPORTAR NOVA FUNÇÃO
     members, isLoadingMembers, inviteMember, removeMember,
     items, isLoadingItems, fetchNextPage, hasNextPage, isFetchingNextPage,
     addItem, updateItem, deleteItem, updateItemsOrder, deletePurchaseHistory,

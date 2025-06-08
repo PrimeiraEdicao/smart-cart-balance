@@ -11,7 +11,8 @@ import CompraRapida from "./pages/CompraRapida";
 import Historico from "./pages/Historico";
 import NotFound from "./pages/NotFound";
 import { AuthPage } from "./pages/Auth";
-import { UpdatePasswordPage } from "./pages/UpdatePassword"; // Importe a nova página
+import { UpdatePasswordPage } from "./pages/UpdatePassword";
+import { ListIndex } from "./pages/ListIndex"; // ✅ IMPORTAR NOVA PÁGINA
 
 // Provedor e Rota Protegida
 import { AppProvider } from "./context/AppContext";
@@ -42,7 +43,8 @@ const App = () => (
             {/* Rotas protegidas */}
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<Index />} />
-              <Route path="/lista" element={<Lista />} />
+              <Route path="/listas" element={<ListIndex />} /> {/* ✅ NOVA ROTA */}
+              <Route path="/lista/:listId" element={<Lista />} /> {/* ✅ ROTA ATUALIZADA */}
               <Route path="/compra-rapida" element={<CompraRapida />} />
               <Route path="/historico" element={<Historico />} />
             </Route>

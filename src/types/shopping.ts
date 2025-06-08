@@ -95,3 +95,12 @@ export interface DiscountCoupon {
   code?: string;
   discountPercentage?: number;
 }
+
+export interface ShoppingList {
+  id: string;
+  name: string;
+  owner_id: string;
+  created_at: string;
+  is_favorited: boolean; // ✅ NOVO CAMPO ADICIONADO
+  members?: ListMember[];
+}

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Tag, Plus, GripVertical, MessageSquare, Users, Camera, Loader2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom"; // ✅ IMPORTAR useParams
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ScanAddDialog } from "@/components/ScanAddDialog";
 import { ItemActionDialog } from "@/components/ItemActionDialog";
@@ -27,14 +27,14 @@ interface ListItemCardProps {
     onDrop: React.DragEventHandler<HTMLDivElement>;
 }
 
-const ListItemCard = React.memo(({ 
-    item, 
-    isDragged, 
-    onItemClick, 
-    onCommentClick, 
-    onDragStart, 
-    onDragOver, 
-    onDrop 
+const ListItemCard = React.memo(({
+    item,
+    isDragged,
+    onItemClick,
+    onCommentClick,
+    onDragStart,
+    onDragOver,
+    onDrop
 }: ListItemCardProps) => {
     const { members } = useAppContext();
 
@@ -42,12 +42,12 @@ const ListItemCard = React.memo(({
         e.stopPropagation();
         onCommentClick(item);
     };
-    
+
     return (
-        <Card 
-            onClick={() => onItemClick(item)} 
-            className="mb-2 cursor-pointer" 
-            draggable 
+        <Card
+            onClick={() => onItemClick(item)}
+            className="mb-2 cursor-pointer"
+            draggable
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDrop={onDrop}
@@ -62,12 +62,12 @@ const ListItemCard = React.memo(({
                         {item.user_id && members.length > 1 && <MemberBadge userId={item.user_id} />}
                     </div>
                 </div>
-                
+
                 {/* ✅ Lógica para exibir o avatar de atribuição */}
                 {item.assigned_to_user_id && <AssignmentBadge userId={item.assigned_to_user_id} />}
 
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCommentButtonClick}>
-                    <MessageSquare className="h-5 w-5 text-gray-600"/>
+                    <MessageSquare className="h-5 w-5 text-gray-600" />
                 </Button>
             </CardContent>
         </Card>
@@ -82,29 +82,41 @@ const LoadingSkeleton = () => (
 
 const Lista = () => {
     const navigate = useNavigate();
-    // ✅ 1. Obter as novas propriedades do contexto
-    const { 
-        items, 
-        isLoadingItems, 
-        fetchNextPage, 
-        hasNextPage, 
+    const { listId } = useParams<{ listId: string }>(); // ✅ PEGAR ID DA URL
+
+    const {
+        shoppingLists,
+        items,
+        isLoadingItems,
+        fetchNextPage,
+        hasNextPage,
         isFetchingNextPage,
-        updateItem, 
-        deleteItem, 
-        updateItemsOrder, 
-        activeList, 
-        members 
+        updateItem,
+        deleteItem,
+        updateItemsOrder,
+        members,
+        switchActiveList, // ✅ Usar para definir a lista ativa
     } = useAppContext();
-    
+
+    // ✅ Encontrar a lista ativa baseada no ID da URL
+    const activeList = shoppingLists.find(list => list.id === listId);
+
+    // ✅ Definir a lista ativa no contexto quando o ID da URL mudar
+    useEffect(() => {
+        if (activeList) {
+            switchActiveList(activeList);
+        }
+    }, [activeList, switchActiveList]);
+
     // ... (states e hooks sem alterações)
     const [showAddDialog, setShowAddDialog] = useState(false);
     const [showScanAddDialog, setShowScanAddDialog] = useState(false);
     const [showActionDialog, setShowActionDialog] = useState(false);
     const [showCategoryManager, setShowCategoryManager] = useState(false);
     const [showCommentsDialog, setShowCommentsDialog] = useState(false);
-    const [showMemberDialog, setShowMemberDialog] = useState(false); 
+    const [showMemberDialog, setShowMemberDialog] = useState(false);
     const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
-    
+
     const {
         groupedItems, draggedItem, groupBy, setGroupBy,
         getCategoryName, getCategoryColor,
@@ -136,9 +148,12 @@ const Lista = () => {
             }
         };
     }, [hasNextPage, fetchNextPage, isFetchingNextPage]);
-    
+
+    // ✅ Atualizar a tela de carregamento e o estado de lista não encontrada
+    if (!activeList && !isLoadingItems) {
+        return <div className="p-4 text-center">Lista não encontrada ou carregando...</div>;
+    }
     if (isLoadingItems && items.length === 0) return <LoadingSkeleton />;
-    if (!activeList) return <div className="p-4 text-center">Selecione uma lista para começar.</div>;
 
     const handleItemClick = useCallback((item: ListItem) => {
         setSelectedItem(item);
@@ -156,8 +171,8 @@ const Lista = () => {
             {/* Header (sem alterações) */}
             <header className="bg-white shadow-sm border-b sticky top-0 z-10">
                 <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-                    <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></Button>
-                    <h1 className="text-lg font-bold truncate" title={activeList.name}>{activeList.name}</h1>
+                    <Button variant="ghost" size="icon" onClick={() => navigate('/listas')}><ArrowLeft className="h-5 w-5" /></Button>
+                    <h1 className="text-lg font-bold truncate" title={activeList?.name}>{activeList?.name}</h1>
                     <div className="flex items-center gap-1">
                         <Button variant="outline" size="icon" onClick={() => setShowScanAddDialog(true)}>
                             <Camera className="h-4 w-4" />
@@ -167,7 +182,7 @@ const Lista = () => {
                             <span className="hidden sm:inline">{members.length}</span>
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => setShowCategoryManager(true)}>
-                            <Tag className="h-4 w-4 sm:mr-2"/>
+                            <Tag className="h-4 w-4 sm:mr-2" />
                             <span className="hidden sm:inline">Categorias</span>
                         </Button>
                     </div>
@@ -176,8 +191,8 @@ const Lista = () => {
 
             <main className="max-w-md mx-auto px-4 py-6">
                 <div className="flex space-x-2 mb-4">
-                  <Button variant={groupBy === 'none' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('none')}>Lista</Button>
-                  <Button variant={groupBy === 'category' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('category')}>Por Categoria</Button>
+                    <Button variant={groupBy === 'none' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('none')}>Lista</Button>
+                    <Button variant={groupBy === 'category' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('category')}>Por Categoria</Button>
                 </div>
 
                 <div className="space-y-4">
@@ -185,7 +200,7 @@ const Lista = () => {
                         <div key={groupKey}>
                             {groupBy === 'category' && groupKey !== 'all' && <h2 className="font-semibold text-gray-700 mb-2 flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${getCategoryColor(groupKey)}`} />{getCategoryName(groupKey)}</h2>}
                             {groupItems.map((item: ListItem) => (
-                                <ListItemCard 
+                                <ListItemCard
                                     key={item.id}
                                     item={item}
                                     isDragged={draggedItem?.id === item.id}
@@ -200,7 +215,7 @@ const Lista = () => {
                     ))}
                 </div>
 
-                 {/* ✅ 4. Adicionar o gatilho e o indicador de carregamento */}
+                {/* ✅ 4. Adicionar o gatilho e o indicador de carregamento */}
                 <div ref={observerRef} className="h-1" />
                 {isFetchingNextPage && (
                     <div className="flex justify-center items-center p-4">
@@ -210,7 +225,7 @@ const Lista = () => {
                 )}
 
 
-                 {items.length === 0 && !isLoadingItems && <p className="text-center text-gray-500 py-10">Sua lista está vazia.</p>}
+                {items.length === 0 && !isLoadingItems && <p className="text-center text-gray-500 py-10">Sua lista está vazia.</p>}
             </main>
 
             <Button className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 text-white shadow-lg" onClick={() => setShowAddDialog(true)}><Plus className="h-6 w-6" /></Button>

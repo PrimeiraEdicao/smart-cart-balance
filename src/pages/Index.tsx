@@ -4,8 +4,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { List, ShoppingCart, LogOut, Eye, EyeOff, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
-import { ListSwitcher } from "@/components/ListSwitcher";
-import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 const Index = () => {
@@ -13,13 +11,13 @@ const Index = () => {
   const { 
     user, 
     signOut, 
-    activeList, 
-    isLoadingLists,
-    budget, // <-- Vem do contexto
-    setBudget, // <-- Vem do contexto
+    budget,
+    setBudget,
+    shoppingLists, // Usado para verificar se existe alguma lista
   } = useAppContext();
 
   const [showBalance, setShowBalance] = useState(true);
+  const hasLists = shoppingLists.length > 0;
 
   const handleSetBudget = () => {
     const newBudgetStr = prompt("Defina seu orçamento disponível:", budget.toString());
@@ -67,26 +65,20 @@ const Index = () => {
                 </div>
             </CardContent>
         </Card>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Lista Ativa</label>
-          {isLoadingLists ? <Skeleton className="h-10 w-full" /> : <ListSwitcher />}
-        </div>
         
         <div className="space-y-4">
           <Button
             className="w-full h-20 bg-white hover:bg-gray-50 text-gray-800 border-2 border-gray-200 shadow-sm justify-start"
-            onClick={() => navigate('/lista')}
-            disabled={!activeList}
+            onClick={() => navigate('/listas')} // ✅ NAVEGA PARA A NOVA PÁGINA
           >
             <div className="flex items-center space-x-4">
               <div className="bg-blue-100 p-3 rounded-full">
                 <List className="h-7 w-7 text-blue-600" />
               </div>
               <div className="text-left">
-                <div className="font-semibold text-lg">Acessar Lista</div>
+                <div className="font-semibold text-lg">Minhas Listas</div>
                 <div className="text-sm text-gray-500">
-                  {activeList ? 'Gerenciar seus itens' : 'Selecione uma lista para começar'}
+                  Acesse e gerencie suas listas
                 </div>
               </div>
             </div>
@@ -95,7 +87,7 @@ const Index = () => {
           <Button
             className="w-full h-20 bg-white hover:bg-gray-50 text-gray-800 border-2 border-gray-200 shadow-sm justify-start"
             onClick={() => navigate('/compra-rapida')}
-            disabled={!activeList}
+            disabled={!hasLists} // Desabilita se não houver listas
           >
             <div className="flex items-center space-x-4">
               <div className="bg-green-100 p-3 rounded-full">
@@ -103,7 +95,9 @@ const Index = () => {
               </div>
               <div className="text-left">
                 <div className="font-semibold text-lg">Realizar Compra</div>
-                <div className="text-sm text-gray-500">Modo rápido com scanner</div>
+                <div className="text-sm text-gray-500">
+                  {hasLists ? 'Modo rápido com scanner' : 'Crie uma lista primeiro'}
+                </div>
               </div>
             </div>
           </Button>
