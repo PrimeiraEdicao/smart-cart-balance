@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Tag, Plus, GripVertical, MessageSquare, Users, Camera, Loader2 } from "lucide-react";
+import { ArrowLeft, Tag, Plus, GripVertical, MessageSquare, Users, Camera, Loader2, PiggyBank, Edit } from "lucide-react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { AddItemDialog } from "@/components/AddItemDialog";
 import { ScanAddDialog } from "@/components/ScanAddDialog";
@@ -12,11 +12,72 @@ import { ItemCommentsDialog } from "@/components/ItemCommentsDialog";
 import { AddMemberDialog } from "@/components/AddMemberDialog";
 import { useAppContext } from "@/context/AppContext";
 import { useShoppingListInteractions } from "@/hooks/useShoppingListInteractions";
-import { ListItem } from "@/types/shopping";
+import { ListItem, ShoppingList } from "@/types/shopping";
 import { MemberBadge } from "@/components/MemberBadge";
 import { AssignmentBadge } from "@/components/AssignmentBadge";
+import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
 
-// O componente ListItemCard continua o mesmo...
+const BudgetCard = ({ list, items, onUpdateBudget }: { list: ShoppingList, items: ListItem[], onUpdateBudget: (vars: {listId: string, budget: number}) => void }) => {
+    const totalSpent = useMemo(() => {
+        return items
+            .filter(item => item.purchased && item.price)
+            .reduce((sum, item) => sum + (item.price! * item.quantity), 0);
+    }, [items]);
+
+    const budget = list.budget || 0;
+    const remainingBalance = budget - totalSpent;
+    const progress = budget > 0 ? (totalSpent / budget) * 100 : 0;
+
+    const handleSetBudget = () => {
+        const newBudgetStr = prompt("Defina o orçamento para esta lista:", budget.toString());
+        if (newBudgetStr) {
+            const newBudget = parseFloat(newBudgetStr);
+            if (!isNaN(newBudget) && newBudget >= 0) {
+                onUpdateBudget({ listId: list.id, budget: newBudget });
+            } else {
+                toast.error("Por favor, insira um valor numérico válido.");
+            }
+        }
+    };
+
+    return (
+        <Card className="mb-4">
+            <CardContent className="p-4">
+                <div className="flex justify-between items-center mb-3">
+                    <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                        <PiggyBank className="h-5 w-5 text-green-600" />
+                        Orçamento da Lista
+                    </h3>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSetBudget}>
+                        <Edit className="h-4 w-4 text-gray-500" />
+                    </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-center">
+                    <div>
+                        <p className="text-xs text-gray-500">Total Gasto</p>
+                        <p className="text-lg font-bold text-red-600">R$ {totalSpent.toFixed(2)}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs text-gray-500">Saldo Restante</p>
+                        <p className={`text-lg font-bold ${remainingBalance < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            R$ {remainingBalance.toFixed(2)}
+                        </p>
+                    </div>
+                </div>
+                {budget > 0 && (
+                    <div className="mt-3">
+                        <Progress value={progress} className="h-2" />
+                        <div className="text-xs text-gray-500 text-right mt-1">
+                            {Math.min(100, progress).toFixed(0)}% de R$ {budget.toFixed(2)}
+                        </div>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+};
+
 interface ListItemCardProps {
     item: ListItem;
     isDragged: boolean;
@@ -97,6 +158,7 @@ const Lista = () => {
         updateItemsOrder,
         members,
         switchActiveList,
+        updateListBudget,
     } = useAppContext();
 
     const activeList = shoppingLists.find(list => list.id === listId);
@@ -205,6 +267,8 @@ const Lista = () => {
             </header>
 
             <main className="max-w-md mx-auto px-4 py-6">
+                <BudgetCard list={activeList} items={items} onUpdateBudget={updateListBudget} />
+
                 <div className="flex space-x-2 mb-4">
                     <Button variant={groupBy === 'none' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('none')}>Lista</Button>
                     <Button variant={groupBy === 'category' ? 'default' : 'outline'} size="sm" onClick={() => setGroupBy('category')}>Por Categoria</Button>
@@ -214,7 +278,9 @@ const Lista = () => {
                     {Object.entries(groupedItems).map(([groupKey, groupItems]) => (
                         <div key={groupKey}>
                             {groupBy === 'category' && groupKey !== 'all' && <h2 className="font-semibold text-gray-700 mb-2 flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${getCategoryColor(groupKey)}`} />{getCategoryName(groupKey)}</h2>}
-                            {groupItems.map((item: ListItem) => (
+                            
+                            {/* ✅ LÓGICA DE MAPEAMENTO MAIS SEGURA */}
+                            {Array.isArray(groupItems) && groupItems.map((item: ListItem) => (
                                 <ListItemCard
                                     key={item.id}
                                     item={item}

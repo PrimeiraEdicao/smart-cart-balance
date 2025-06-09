@@ -57,19 +57,19 @@ export interface ShoppingList {
   name: string;
   owner_id: string;
   created_at: string;
+  budget?: number; // ✅ NOVO CAMPO DE ORÇAMENTO
   members?: ListMember[];
+  is_favorited: boolean;
 }
 
 export interface ListMember {
   list_id: string;
   user_id: string;
   role: 'owner' | 'member';
-  // ✅ CORREÇÃO PRINCIPAL AQUI
-  // A estrutura do user_profile agora reflete diretamente as colunas da sua tabela 'user_profiles'.
   user_profile?: {
     id?: string;
     email?: string;
-    name?: string; // Removido o aninhamento 'raw_user_meta_data'
+    name?: string;
   }
 }
 
@@ -94,13 +94,4 @@ export interface DiscountCoupon {
   expiryDate?: Date;
   code?: string;
   discountPercentage?: number;
-}
-
-export interface ShoppingList {
-  id: string;
-  name: string;
-  owner_id: string;
-  created_at: string;
-  is_favorited: boolean; // ✅ NOVO CAMPO ADICIONADO
-  members?: ListMember[];
 }

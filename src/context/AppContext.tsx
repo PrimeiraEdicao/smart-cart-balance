@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { ListItem, Category, Comment, PriceEntry, ShoppingList, ListMember, Notification } from '@/types/shopping';
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery, QueryKey } from '@tanstack/react-query';
 import { defaultCategories } from '@/data/categories';
-import usePersistentState from '@/hooks/usePersistentState';
 
 // Interface completa do Contexto
 interface AppContextType {
@@ -13,16 +12,15 @@ interface AppContextType {
   user: User | null;
   loadingAuth: boolean;
   signOut: () => Promise<any>;
-  budget: number;
-  setBudget: (newBudget: number) => void;
   shoppingLists: ShoppingList[];
   isLoadingLists: boolean;
   activeList: ShoppingList | null;
   switchActiveList: (list: ShoppingList | null) => void;
   createList: (name: string) => void;
   updateList: (listId: string, newName: string) => void;
+  updateListBudget: (variables: { listId: string; budget: number }) => void;
   deleteList: (listId: string) => void;
-  toggleFavoriteList: (listId: string, isFavorited: boolean) => void; // ✅ NOVA FUNÇÃO
+  toggleFavoriteList: (listId: string, isFavorited: boolean) => void;
   members: ListMember[];
   isLoadingMembers: boolean;
   inviteMember: (email: string) => void;
@@ -60,8 +58,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [activeList, setActiveList] = useState<ShoppingList | null>(null); // ✅ GERENCIAMENTO LOCAL
-  const [budget, setBudget] = usePersistentState<number>('mainBudget', 1000);
+  const [activeList, setActiveList] = useState<ShoppingList | null>(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -80,14 +77,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     queryClient.clear();
   };
 
-  // ✅ Query para buscar e ORDENAR as listas
   const { data: shoppingLists = [], isLoading: isLoadingLists } = useQuery({
     queryKey: ['shoppingLists', user?.id],
     queryFn: async () => {
         if (!user) return [];
         const { data, error } = await supabase.rpc('get_user_shopping_lists');
         if (error) throw error;
-        // Ordena por favoritas e depois por data de criação
         return (data || []).sort((a, b) => {
             if (a.is_favorited && !b.is_favorited) return -1;
             if (!a.is_favorited && b.is_favorited) return 1;
@@ -125,8 +120,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return data;
     },
     initialPageParam: 0,
+    // ✅ BUG CORRIGIDO AQUI
     getNextPageParam: (lastPage, allPages) => {
-      return lastPage && lastPage.length === PAGE_SIZE ? allPages.length : undefined;
+      return lastPage.length === PAGE_SIZE ? allPages.length : undefined;
     },
     enabled: !!activeList,
   });
@@ -315,7 +311,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       onError: (e: any) => toast.error(e.message),
   });
     
-  // ✅ NOVA MUTATION PARA FAVORITAR/DESFAVORITAR
   const { mutate: toggleFavoriteList } = useMutation({
     mutationFn: async ({ listId, isFavorited }: { listId: string, isFavorited: boolean }) => {
         const { error } = await supabase.from('shopping_lists').update({ is_favorited: !isFavorited }).eq('id', listId);
@@ -377,13 +372,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const { mutate: updateItem } = useMutation({
     mutationFn: async (variables: { id: string } & Partial<ListItem>) => supabase.from('items').update(variables).eq('id', variables.id).select().single(),
-    onSuccess: (updatedItem, variables) => {
-      if (variables.purchased && variables.price && variables.quantity) {
-        const spent = variables.price * variables.quantity;
-        const newBudget = budget - spent;
-        setBudget(newBudget);
-        toast.success(`Compra registrada! Saldo restante: R$ ${newBudget.toFixed(2)}`);
-      }
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['items', activeList?.id] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -461,12 +450,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     },
     onError: (e: any) => toast.error(e.message),
   });
+  
+  const { mutate: updateListBudget } = useMutation({
+    mutationFn: async ({ listId, budget }: { listId: string, budget: number }) => {
+        const { error } = await supabase.from('shopping_lists').update({ budget }).eq('id', listId);
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        toast.success("Orçamento da lista atualizado.");
+        queryClient.invalidateQueries({ queryKey: ['shoppingLists', user?.id] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const value = {
     session, user, loadingAuth, signOut,
-    budget, setBudget,
     shoppingLists, isLoadingLists, activeList, switchActiveList, createList, updateList, deleteList,
-    toggleFavoriteList, // ✅ EXPORTAR NOVA FUNÇÃO
+    toggleFavoriteList,
+    updateListBudget,
     members, isLoadingMembers, inviteMember, removeMember,
     items, isLoadingItems, fetchNextPage, hasNextPage, isFetchingNextPage,
     addItem, updateItem, deleteItem, updateItemsOrder, deletePurchaseHistory,

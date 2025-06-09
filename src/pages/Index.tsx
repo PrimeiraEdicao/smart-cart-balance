@@ -1,108 +1,93 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { List, ShoppingCart, LogOut, Eye, EyeOff, User } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ListChecks, LogOut, ScanLine, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { useAppContext } from "@/context/AppContext";
-import { toast } from "sonner";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { 
-    user, 
-    signOut, 
-    budget,
-    setBudget,
-    shoppingLists, // Usado para verificar se existe alguma lista
-  } = useAppContext();
-
-  const [showBalance, setShowBalance] = useState(true);
+  const { user, signOut, shoppingLists } = useAppContext();
   const hasLists = shoppingLists.length > 0;
-
-  const handleSetBudget = () => {
-    const newBudgetStr = prompt("Defina seu orçamento disponível:", budget.toString());
-    if (newBudgetStr) {
-      const newBudget = parseFloat(newBudgetStr);
-      if (!isNaN(newBudget)) {
-        setBudget(newBudget);
-        toast.success("Orçamento atualizado!");
-      } else {
-        toast.error("Por favor, insira um valor numérico.");
-      }
-    }
-  };
 
   const handleLogout = async () => {
     await signOut();
-    navigate('/auth');
+    navigate("/auth");
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white shadow-sm border-b">
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow-sm border-b">
         <div className="max-w-md mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <User className="h-5 w-5 text-gray-600" />
-            <span className="text-sm text-gray-600 hidden sm:block">{user?.email}</span>
+          <div className="flex items-center gap-3">
+            <div className="bg-gray-100 p-2 rounded-full">
+              <User className="h-5 w-5 text-gray-600" />
+            </div>
+            <span className="text-sm text-gray-700 font-medium hidden sm:block">
+              {user?.email}
+            </span>
           </div>
-          <Button variant="ghost" size="icon" className="rounded-full" onClick={handleLogout}>
-            <LogOut className="h-5 w-5" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-5 w-5 text-gray-600" />
           </Button>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-md mx-auto px-4 py-6 space-y-6">
-        <Card className="bg-white shadow-lg cursor-pointer" onClick={handleSetBudget}>
-            <CardContent className="p-6">
-                <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-500">Saldo Disponível (clique para editar)</span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setShowBalance(!showBalance); }}>
-                        {showBalance ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </Button>
-                </div>
-                <div className={`text-4xl font-bold ${!showBalance ? 'blur-md' : ''}`}>
-                    R$ {budget.toFixed(2).replace('.',',')}
-                </div>
+      <main className="max-w-md mx-auto px-4 py-6">
+        <div className="grid grid-cols-2 gap-4">
+          <Card
+            className="cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => navigate("/listas")}
+          >
+            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
+              <div className="bg-blue-100 p-3 rounded-full mb-3">
+                <ListChecks className="h-8 w-8 text-blue-600" />
+              </div>
+              <p className="font-semibold text-gray-800">Minhas Listas</p>
+              <p className="text-xs text-gray-500">
+                Acesse e gerencie suas listas
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card
+            className={`cursor-pointer hover:shadow-md transition-shadow ${
+              !hasLists
+                ? "bg-gray-100 opacity-60 cursor-not-allowed"
+                : "bg-white"
+            }`}
+            onClick={() => hasLists && navigate("/compra-rapida")}
+          >
+            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
+              <div className="bg-green-100 p-3 rounded-full mb-3">
+                <ScanLine className="h-8 w-8 text-green-600" />
+              </div>
+              <p className="font-semibold text-gray-800">Compra Rápida</p>
+              <p className="text-xs text-gray-500">
+                {hasLists ? "Modo rápido com scanner" : "Crie uma lista"}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+        
+        <Card className="mt-6">
+            <CardHeader>
+                <CardTitle className="text-base">Bem-vindo(a) de volta!</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-gray-600">Selecione uma das opções acima para começar a organizar suas compras de forma inteligente.</p>
             </CardContent>
         </Card>
-        
-        <div className="space-y-4">
-          <Button
-            className="w-full h-20 bg-white hover:bg-gray-50 text-gray-800 border-2 border-gray-200 shadow-sm justify-start"
-            onClick={() => navigate('/listas')} // ✅ NAVEGA PARA A NOVA PÁGINA
-          >
-            <div className="flex items-center space-x-4">
-              <div className="bg-blue-100 p-3 rounded-full">
-                <List className="h-7 w-7 text-blue-600" />
-              </div>
-              <div className="text-left">
-                <div className="font-semibold text-lg">Minhas Listas</div>
-                <div className="text-sm text-gray-500">
-                  Acesse e gerencie suas listas
-                </div>
-              </div>
-            </div>
-          </Button>
-
-          <Button
-            className="w-full h-20 bg-white hover:bg-gray-50 text-gray-800 border-2 border-gray-200 shadow-sm justify-start"
-            onClick={() => navigate('/compra-rapida')}
-            disabled={!hasLists} // Desabilita se não houver listas
-          >
-            <div className="flex items-center space-x-4">
-              <div className="bg-green-100 p-3 rounded-full">
-                <ShoppingCart className="h-7 w-7 text-green-600" />
-              </div>
-              <div className="text-left">
-                <div className="font-semibold text-lg">Realizar Compra</div>
-                <div className="text-sm text-gray-500">
-                  {hasLists ? 'Modo rápido com scanner' : 'Crie uma lista primeiro'}
-                </div>
-              </div>
-            </div>
-          </Button>
-        </div>
-      </div>
+      </main>
     </div>
   );
 };
