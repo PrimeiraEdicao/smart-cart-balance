@@ -18,6 +18,7 @@ import { AssignmentBadge } from "@/components/AssignmentBadge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 
+// Componente do Card de Orçamento (sem alterações)
 const BudgetCard = ({ list, items, onUpdateBudget }: { list: ShoppingList, items: ListItem[], onUpdateBudget: (vars: {listId: string, budget: number}) => void }) => {
     const totalSpent = useMemo(() => {
         return items
@@ -78,6 +79,7 @@ const BudgetCard = ({ list, items, onUpdateBudget }: { list: ShoppingList, items
     );
 };
 
+// Componente do Card de Item (sem alterações)
 interface ListItemCardProps {
     item: ListItem;
     isDragged: boolean;
@@ -88,15 +90,7 @@ interface ListItemCardProps {
     onDrop: React.DragEventHandler<HTMLDivElement>;
 }
 
-const ListItemCard = React.memo(({
-    item,
-    isDragged,
-    onItemClick,
-    onCommentClick,
-    onDragStart,
-    onDragOver,
-    onDrop
-}: ListItemCardProps) => {
+const ListItemCard = React.memo(({ item, isDragged, onItemClick, onCommentClick, onDragStart, onDragOver, onDrop }: ListItemCardProps) => {
     const { members } = useAppContext();
     const handleCommentButtonClick = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -131,6 +125,7 @@ const ListItemCard = React.memo(({
 });
 ListItemCard.displayName = 'ListItemCard';
 
+// Componente de Skeleton (sem alterações)
 const LoadingSkeleton = () => (
     <div className="p-4 max-w-md mx-auto space-y-4">
         <Skeleton className="h-10 w-full" />
@@ -141,6 +136,7 @@ const LoadingSkeleton = () => (
     </div>
 );
 
+// Componente Principal da Página
 const Lista = () => {
     const navigate = useNavigate();
     const { listId } = useParams<{ listId: string }>();
@@ -161,7 +157,33 @@ const Lista = () => {
         updateListBudget,
     } = useAppContext();
 
+    const [showAddDialog, setShowAddDialog] = useState(false);
+    const [showScanAddDialog, setShowScanAddDialog] = useState(false);
+    const [showActionDialog, setShowActionDialog] = useState(false);
+    const [showCategoryManager, setShowCategoryManager] = useState(false);
+    const [showCommentsDialog, setShowCommentsDialog] = useState(false);
+    const [showMemberDialog, setShowMemberDialog] = useState(false);
+    const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
+
+    const observerRef = useRef<HTMLDivElement | null>(null);
     const activeList = shoppingLists.find(list => list.id === listId);
+
+    const {
+        groupedItems, draggedItem, groupBy, setGroupBy,
+        getCategoryName, getCategoryColor,
+        handleDragStart, handleDragOver, handleDrop
+    } = useShoppingListInteractions(items, updateItemsOrder);
+
+    // ✅ CORREÇÃO: MOVIDO OS HOOKS PARA O TOPO, ANTES DOS RETORNOS ANTECIPADOS
+    const handleItemClick = useCallback((item: ListItem) => {
+        setSelectedItem(item);
+        setShowActionDialog(true);
+    }, []);
+
+    const handleCommentClick = useCallback((item: ListItem) => {
+        setSelectedItem(item);
+        setShowCommentsDialog(true);
+    }, []);
 
     useEffect(() => {
         if (activeList) {
@@ -171,22 +193,6 @@ const Lista = () => {
             switchActiveList(null);
         };
     }, [activeList, switchActiveList]);
-
-    const [showAddDialog, setShowAddDialog] = useState(false);
-    const [showScanAddDialog, setShowScanAddDialog] = useState(false);
-    const [showActionDialog, setShowActionDialog] = useState(false);
-    const [showCategoryManager, setShowCategoryManager] = useState(false);
-    const [showCommentsDialog, setShowCommentsDialog] = useState(false);
-    const [showMemberDialog, setShowMemberDialog] = useState(false);
-    const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
-
-    const {
-        groupedItems, draggedItem, groupBy, setGroupBy,
-        getCategoryName, getCategoryColor,
-        handleDragStart, handleDragOver, handleDrop
-    } = useShoppingListInteractions(items, updateItemsOrder);
-
-    const observerRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
         const observer = new IntersectionObserver(
@@ -210,6 +216,7 @@ const Lista = () => {
         };
     }, [hasNextPage, fetchNextPage, isFetchingNextPage]);
 
+    // Lógica de Retorno Antecipado (agora segura)
     if (isLoadingLists || !listId) {
         return <LoadingSkeleton />;
     }
@@ -231,16 +238,6 @@ const Lista = () => {
     if (isLoadingItems && items.length === 0) {
         return <LoadingSkeleton />;
     }
-
-    const handleItemClick = useCallback((item: ListItem) => {
-        setSelectedItem(item);
-        setShowActionDialog(true);
-    }, []);
-
-    const handleCommentClick = useCallback((item: ListItem) => {
-        setSelectedItem(item);
-        setShowCommentsDialog(true);
-    }, []);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -279,7 +276,6 @@ const Lista = () => {
                         <div key={groupKey}>
                             {groupBy === 'category' && groupKey !== 'all' && <h2 className="font-semibold text-gray-700 mb-2 flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${getCategoryColor(groupKey)}`} />{getCategoryName(groupKey)}</h2>}
                             
-                            {/* ✅ LÓGICA DE MAPEAMENTO MAIS SEGURA */}
                             {Array.isArray(groupItems) && groupItems.map((item: ListItem) => (
                                 <ListItemCard
                                     key={item.id}
@@ -310,7 +306,6 @@ const Lista = () => {
 
             <Button className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 text-white shadow-lg" onClick={() => setShowAddDialog(true)}><Plus className="h-6 w-6" /></Button>
 
-            {/* Dialogs */}
             <AddItemDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
             <ScanAddDialog open={showScanAddDialog} onOpenChange={setShowScanAddDialog} />
             {selectedItem && <ItemActionDialog open={showActionDialog} onOpenChange={setShowActionDialog} item={selectedItem} onUpdateItem={updateItem} onDeleteItem={deleteItem} />}

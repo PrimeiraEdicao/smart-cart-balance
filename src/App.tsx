@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 
 import { AppProvider } from "./context/AppContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import ErrorBoundary from "./components/ErrorBoundary"; // Importe o novo componente
 
 // Importação das suas páginas
 import Index from "./pages/Index";
@@ -15,7 +16,6 @@ import Historico from "./pages/Historico";
 import { UpdatePasswordPage } from "./pages/UpdatePassword";
 import NotFound from "./pages/NotFound";
 
-// Cria o cliente para o React Query
 const queryClient = new QueryClient();
 
 function App() {
@@ -28,11 +28,21 @@ function App() {
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/update-password" element={<UpdatePasswordPage />} />
 
-            {/* Rotas Protegidas (precisam de login) */}
+            {/* Rotas Protegidas */}
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<Index />} />
               <Route path="/listas" element={<ListIndex />} />
-              <Route path="/lista/:listId" element={<Lista />} />
+              
+              {/* ✅ ROTA DA LISTA ENVOLVIDA COM O ERRORBOUNDARY */}
+              <Route 
+                path="/lista/:listId" 
+                element={
+                  <ErrorBoundary>
+                    <Lista />
+                  </ErrorBoundary>
+                } 
+              />
+              
               <Route path="/compra-rapida" element={<CompraRapida />} />
               <Route path="/historico" element={<Historico />} />
             </Route>

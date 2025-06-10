@@ -1,13 +1,29 @@
-// src/components/ScanAddDialog.tsx
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Camera, CheckCircle, Search } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Camera, CheckCircle, Search, Loader2 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { toast } from "sonner";
+
+// Função para buscar dados do produto pelo código de barras
+async function fetchProductByBarcode(barcode: string) {
+  try {
+    const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+    if (!response.ok) {
+      throw new Error('Produto não encontrado na base de dados.');
+    }
+    const data = await response.json();
+    if (data.status === 0) {
+      throw new Error(data.status_verbose || 'Produto não encontrado.');
+    }
+    return data.product;
+  } catch (error) {
+    console.error("Erro ao buscar produto:", error);
+    return null;
+  }
+}
 
 interface ScanAddDialogProps {
   open: boolean;
@@ -17,35 +33,37 @@ interface ScanAddDialogProps {
 export const ScanAddDialog = ({ open, onOpenChange }: ScanAddDialogProps) => {
   const { addItem } = useAppContext();
 
-  const [scanning, setScanning] = useState(false);
-  const [scanned, setScanned] = useState(false);
-  const [productFound, setProductFound] = useState(false);
+  // Estados do componente
+  const [step, setStep] = useState<'initial' | 'scanning' | 'scanned'>('initial');
+  const [barcode, setBarcode] = useState("");
+  const [product, setProduct] = useState<{ name: string; brand: string } | null>(null);
   const [quantity, setQuantity] = useState("1");
-  const [productName, setProductName] = useState("");
-  const [manualName, setManualName] = useState("");
-  const [manualBrand, setManualBrand] = useState("");
-
-  const simulateBarcodeScan = () => {
-    setScanning(true);
-    setTimeout(() => {
-      setScanning(false);
-      setScanned(true);
-      const found = Math.random() > 0.5;
-      setProductFound(found);
-      if (found) {
-        setProductName("Arroz Tio João 1kg");
-      }
-    }, 1500);
+  
+  const handleScan = async () => {
+    if (!barcode.trim()) {
+        toast.error("Por favor, insira um código de barras.");
+        return;
+    }
+    setStep('scanning');
+    const foundProduct = await fetchProductByBarcode(barcode);
+    if (foundProduct) {
+      setProduct({
+        name: foundProduct.product_name || 'Nome desconhecido',
+        brand: foundProduct.brands || '',
+      });
+    } else {
+      setProduct(null); // Nenhum produto encontrado
+    }
+    setStep('scanned');
   };
 
   const handleAddToList = () => {
-    const name = productFound ? productName : `${manualName} ${manualBrand}`.trim();
+    const name = product ? `${product.name} ${product.brand}`.trim() : `Produto ${barcode}`;
     if (name && quantity) {
       addItem({
           name: name,
           quantity: parseInt(quantity),
           purchased: false,
-          addedBy: 'Você' // Ou o nome do usuário logado
       });
       toast.success(`"${name}" adicionado à lista.`);
       handleClose();
@@ -56,15 +74,12 @@ export const ScanAddDialog = ({ open, onOpenChange }: ScanAddDialogProps) => {
 
   const handleClose = () => {
     onOpenChange(false);
-    // Atraso para resetar o estado e evitar que o usuário veja a mudança antes da animação de fechar
+    // Reseta o estado ao fechar
     setTimeout(() => {
-      setScanning(false);
-      setScanned(false);
-      setProductFound(false);
+      setStep('initial');
+      setProduct(null);
+      setBarcode("");
       setQuantity("1");
-      setProductName("");
-      setManualName("");
-      setManualBrand("");
     }, 300);
   };
 
@@ -72,55 +87,50 @@ export const ScanAddDialog = ({ open, onOpenChange }: ScanAddDialogProps) => {
     <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="max-w-sm mx-auto">
             <DialogHeader>
-                <DialogTitle>Escanear para Adicionar</DialogTitle>
+                <DialogTitle>Adicionar por Código de Barras</DialogTitle>
+                <DialogDescription>
+                  Digite um código de barras para buscar um produto. Para teste, use: 7891000053508 (Coca-Cola).
+                </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4">
-                {!scanned && (
-                    <div className="text-center">
-                        <div className="bg-gray-100 rounded-lg p-8 mb-4 flex items-center justify-center h-40">
-                            {scanning ? (
-                                <div className="flex flex-col items-center space-y-3">
-                                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                                    <div className="text-sm text-gray-600">Procurando produto...</div>
-                                </div>
-                            ) : (
-                                <Camera className="h-12 w-12 text-gray-400 mx-auto" />
-                            )}
-                        </div>
-                        <Button onClick={simulateBarcodeScan} className="w-full">
-                            <Camera className="h-4 w-4 mr-2" />
-                            Escanear Código de Barras
+            <div className="space-y-4 pt-4">
+                {step === 'initial' && (
+                    <div className="space-y-4">
+                        <Label htmlFor="barcode">Código de Barras</Label>
+                        <Input 
+                            id="barcode" 
+                            value={barcode} 
+                            onChange={(e) => setBarcode(e.target.value)} 
+                            placeholder="Digite o código de barras"
+                        />
+                        <Button onClick={handleScan} className="w-full">
+                            <Search className="h-4 w-4 mr-2" />
+                            Buscar Produto
                         </Button>
                     </div>
                 )}
+                
+                {step === 'scanning' && (
+                    <div className="flex flex-col items-center justify-center h-40 space-y-3">
+                        <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                        <p className="text-sm text-gray-600">Buscando produto na API...</p>
+                    </div>
+                )}
 
-                {scanned && (
+                {step === 'scanned' && (
                     <div className="space-y-4">
-                        {productFound ? (
+                        {product ? (
                             <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
                                 <CheckCircle className="h-10 w-10 text-green-600 mx-auto mb-2" />
                                 <div className="text-sm text-gray-600">Produto encontrado:</div>
-                                <div className="font-medium text-lg">{productName}</div>
+                                <div className="font-medium text-lg">{product.name}</div>
+                                <div className="text-sm text-gray-500">{product.brand}</div>
                             </div>
                         ) : (
                             <div className="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                                 <Search className="h-10 w-10 text-yellow-600 mx-auto mb-2" />
                                 <div className="text-sm text-gray-600">Produto não encontrado.</div>
-                                <div className="font-medium text-lg">Insira os dados manualmente:</div>
-                            </div>
-                        )}
-
-                        {!productFound && (
-                             <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <Label htmlFor="manualName">Nome do Produto</Label>
-                                    <Input id="manualName" value={manualName} onChange={(e) => setManualName(e.target.value)} className="mt-1" placeholder="Ex: Café"/>
-                                </div>
-                                <div>
-                                    <Label htmlFor="manualBrand">Marca</Label>
-                                    <Input id="manualBrand" value={manualBrand} onChange={(e) => setManualBrand(e.target.value)} className="mt-1" placeholder="Ex: Pilão"/>
-                                </div>
+                                <div className="font-medium">O item será adicionado com o código.</div>
                             </div>
                         )}
                         
@@ -130,7 +140,7 @@ export const ScanAddDialog = ({ open, onOpenChange }: ScanAddDialogProps) => {
                         </div>
 
                         <div className="flex space-x-2 pt-2">
-                            <Button variant="outline" onClick={handleClose} className="flex-1">Cancelar</Button>
+                             <Button variant="outline" onClick={() => setStep('initial')} className="flex-1">Buscar Outro</Button>
                             <Button onClick={handleAddToList} className="flex-1">Adicionar à Lista</Button>
                         </div>
                     </div>
