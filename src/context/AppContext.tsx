@@ -2,7 +2,7 @@ import React, { createContext, useContext, ReactNode, useState, useEffect } from
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { toast } from "sonner";
-import { ListItem, Category, Comment, PriceEntry, ShoppingList, ListMember, Notification } from '@/types/shopping';
+import { ListItem, Category, Comment, PriceEntry, ShoppingList, ListMember, Notification, ListTemplate } from '@/types/shopping';
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery, QueryKey } from '@tanstack/react-query';
 import { defaultCategories } from '@/data/categories';
 
@@ -47,6 +47,9 @@ interface AppContextType {
   notifications: Notification[];
   isLoadingNotifications: boolean;
   markNotificationsAsRead: (notificationIds: string[]) => void;
+  listTemplates: ListTemplate[];
+  createListTemplate: (template: Omit<ListTemplate, 'id' | 'user_id'>) => void;
+  deleteListTemplate: (templateId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -120,7 +123,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return data;
     },
     initialPageParam: 0,
-    // ✅ BUG CORRIGIDO AQUI
     getNextPageParam: (lastPage, allPages) => {
       return lastPage.length === PAGE_SIZE ? allPages.length : undefined;
     },
@@ -426,7 +428,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const { mutate: updateCategory } = useMutation({
       mutationFn: async (variables: { id: string } & Partial<Category>) => supabase.from('categories').update(variables).eq('id', variables.id),
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories', user?.id] }),
+      onSuccess: (_, variables) => {
+          queryClient.invalidateQueries({ queryKey: ['categories', user?.id, variables.id] });
+          queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
+      },
       onError: (e: any) => toast.error(e.message),
   });
 
@@ -463,6 +468,48 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const { data: listTemplates = [] } = useQuery({
+    queryKey: ['listTemplates', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('list_templates')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name');
+      if (error) {
+        console.error("Erro ao buscar modelos de lista:", error);
+        throw error;
+      }
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const { mutate: createListTemplate } = useMutation({
+    mutationFn: async (template: Omit<ListTemplate, 'id' | 'user_id'>) => {
+        if (!user) throw new Error("Usuário não autenticado");
+        return supabase.from('list_templates').insert([{ ...template, user_id: user.id }]);
+    },
+    onSuccess: () => {
+        toast.success("Modelo salvo com sucesso!");
+        queryClient.invalidateQueries({ queryKey: ['listTemplates', user?.id] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const { mutate: deleteListTemplate } = useMutation({
+    mutationFn: async (templateId: string) => {
+        return supabase.from('list_templates').delete().eq('id', templateId);
+    },
+    onSuccess: () => {
+        toast.error("Modelo removido.");
+        queryClient.invalidateQueries({ queryKey: ['listTemplates', user?.id] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+
   const value = {
     session, user, loadingAuth, signOut,
     shoppingLists, isLoadingLists, activeList, switchActiveList, createList, updateList, deleteList,
@@ -476,6 +523,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     notifications,
     isLoadingNotifications,
     markNotificationsAsRead,
+    listTemplates,
+    createListTemplate,
+    deleteListTemplate,
   };
 
   return <AppContext.Provider value={value as any}>{children}</AppContext.Provider>;

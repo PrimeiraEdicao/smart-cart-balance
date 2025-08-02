@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { BookTemplate, Plus, Trash2 } from "lucide-react";
-import { ListTemplate, ListItem, TemplateItem } from "@/types/shopping"; // Importar TemplateItem
+import { ListTemplate, TemplateItem } from "@/types/shopping";
 import { toast } from "sonner";
 import { useAppContext } from "@/context/AppContext";
 
@@ -16,15 +16,10 @@ interface ListTemplateDialogProps {
 }
 
 export const ListTemplateDialog = ({ open, onOpenChange }: ListTemplateDialogProps) => {
-  const { items: currentItems, addItem } = useAppContext();
+  const { items: currentItems, addItem, listTemplates, createListTemplate, deleteListTemplate } = useAppContext();
   const [mode, setMode] = useState<'list' | 'create'>('list');
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
-
-  const [templates, setTemplates] = useState<ListTemplate[]>(() => {
-    const savedTemplates = localStorage.getItem("shoppingListTemplates");
-    return savedTemplates ? JSON.parse(savedTemplates) : [];
-  });
   
   const onCreateFromTemplate = (template: ListTemplate) => {
       template.items.forEach(item => {
@@ -39,9 +34,7 @@ export const ListTemplateDialog = ({ open, onOpenChange }: ListTemplateDialogPro
       return;
     }
 
-    // CORRIGIDO: Agora cria um array de `TemplateItem`
-    const newTemplate: ListTemplate = {
-      id: Date.now().toString(),
+    const newTemplate: Omit<ListTemplate, 'id' | 'user_id'> = {
       name: templateName,
       description: templateDescription,
       items: currentItems.map(item => ({
@@ -51,14 +44,11 @@ export const ListTemplateDialog = ({ open, onOpenChange }: ListTemplateDialogPro
       }))
     };
 
-    const updatedTemplates = [...templates, newTemplate];
-    setTemplates(updatedTemplates);
-    localStorage.setItem("shoppingListTemplates", JSON.stringify(updatedTemplates));
+    createListTemplate(newTemplate);
     
     setTemplateName("");
     setTemplateDescription("");
     setMode('list');
-    toast.success("Modelo salvo com sucesso!");
   };
 
   const handleUseTemplate = (template: ListTemplate) => {
@@ -67,10 +57,9 @@ export const ListTemplateDialog = ({ open, onOpenChange }: ListTemplateDialogPro
   };
 
   const handleDeleteTemplate = (templateId: string) => {
-    const updatedTemplates = templates.filter(t => t.id !== templateId);
-    setTemplates(updatedTemplates);
-    localStorage.setItem("shoppingListTemplates", JSON.stringify(updatedTemplates));
-    toast.error("Modelo removido.");
+    if(confirm("Tem certeza que deseja apagar este modelo?")) {
+        deleteListTemplate(templateId);
+    }
   };
 
   return (
@@ -100,7 +89,7 @@ export const ListTemplateDialog = ({ open, onOpenChange }: ListTemplateDialogPro
               </div>
 
               <div className="space-y-3">
-                {templates.map((template) => (
+                {listTemplates.map((template) => (
                   <Card key={template.id} className="cursor-pointer hover:shadow-md">
                     <CardContent className="p-4">
                       <div className="flex justify-between items-start mb-2">
@@ -140,7 +129,7 @@ export const ListTemplateDialog = ({ open, onOpenChange }: ListTemplateDialogPro
                 ))}
               </div>
 
-              {templates.length === 0 && (
+              {listTemplates.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
                   <BookTemplate className="h-12 w-12 mx-auto mb-2 text-gray-300" />
                   <div>Nenhum modelo salvo</div>

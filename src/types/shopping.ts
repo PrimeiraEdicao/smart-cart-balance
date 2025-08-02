@@ -47,9 +47,10 @@ export interface TemplateItem {
 export interface ListTemplate {
   id: string;
   name: string;
-  items: TemplateItem[]; // ATUALIZADO: Usa o novo tipo TemplateItem.
+  items: TemplateItem[];
   description?: string;
   categoryBudgets?: { categoryId: string; budget: number }[];
+  user_id: string; // Adicionado para vincular o template ao usuário
 }
 
 export interface ShoppingList {
@@ -57,7 +58,7 @@ export interface ShoppingList {
   name: string;
   owner_id: string;
   created_at: string;
-  budget?: number; // ✅ NOVO CAMPO DE ORÇAMENTO
+  budget?: number;
   members?: ListMember[];
   is_favorited: boolean;
 }
@@ -75,7 +76,7 @@ export interface ListMember {
 
 export interface Notification {
   id: string;
-  user_id: string; // ID de quem recebe a notificação
+  user_id: string;
   list_id: string;
   item_id?: string;
   type: string;

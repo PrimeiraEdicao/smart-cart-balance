@@ -18,7 +18,7 @@ import { AssignmentBadge } from "@/components/AssignmentBadge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 
-// Componente do Card de Orçamento (sem alterações)
+// Componente do Card de Orçamento
 const BudgetCard = ({ list, items, onUpdateBudget }: { list: ShoppingList, items: ListItem[], onUpdateBudget: (vars: {listId: string, budget: number}) => void }) => {
     const totalSpent = useMemo(() => {
         return items
@@ -79,7 +79,7 @@ const BudgetCard = ({ list, items, onUpdateBudget }: { list: ShoppingList, items
     );
 };
 
-// Componente do Card de Item (sem alterações)
+// Componente do Card de Item
 interface ListItemCardProps {
     item: ListItem;
     isDragged: boolean;
@@ -125,7 +125,7 @@ const ListItemCard = React.memo(({ item, isDragged, onItemClick, onCommentClick,
 });
 ListItemCard.displayName = 'ListItemCard';
 
-// Componente de Skeleton (sem alterações)
+// Componente de Skeleton
 const LoadingSkeleton = () => (
     <div className="p-4 max-w-md mx-auto space-y-4">
         <Skeleton className="h-10 w-full" />
@@ -174,7 +174,6 @@ const Lista = () => {
         handleDragStart, handleDragOver, handleDrop
     } = useShoppingListInteractions(items, updateItemsOrder);
 
-    // ✅ CORREÇÃO: MOVIDO OS HOOKS PARA O TOPO, ANTES DOS RETORNOS ANTECIPADOS
     const handleItemClick = useCallback((item: ListItem) => {
         setSelectedItem(item);
         setShowActionDialog(true);
