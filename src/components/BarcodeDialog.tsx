@@ -1,5 +1,6 @@
 import React from 'react';
 import { isPlatform } from '@capacitor/core';
+import { toast } from "sonner";
 
 const ScannerComponent: React.FC = () => {
   const startBarcodeScan = async () => {
@@ -16,7 +17,7 @@ const ScannerComponent: React.FC = () => {
       // Solicita permissão (force = true abre popup se necessário)
       const permission = await BarcodeScanner.checkPermission({ force: true });
       if (!permission.granted) {
-        alert('Permissão não concedida.');
+        toast.error('Permissão não concedida.');
         return;
       }
 
@@ -24,13 +25,13 @@ const ScannerComponent: React.FC = () => {
       const result = await BarcodeScanner.startScan();
       if (result.hasContent) {
         console.log("Código escaneado:", result.content);
-        alert(`Código escaneado: ${result.content}`);
+        toast.success(`Código escaneado: ${result.content}`);
       } else {
-        alert("Nenhum conteúdo detectado.");
+        toast.info("Nenhum conteúdo detectado.");
       }
     } catch (error) {
       console.error("Erro ao escanear:", error);
-      alert("Erro ao escanear o código.");
+      toast.error("Erro ao escanear o código.");
     }
   };
 
@@ -39,7 +40,7 @@ const ScannerComponent: React.FC = () => {
     const input = prompt("Digite manualmente o código de barras:");
     if (input) {
       console.log("Código simulado:", input);
-      alert(`Código simulado: ${input}`);
+      toast.success(`Código simulado: ${input}`);
     }
   };
 
