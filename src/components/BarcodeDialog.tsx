@@ -1,55 +1,43 @@
-import React from 'react';
-import { isPlatform } from '@capacitor/core';
-import { toast } from "sonner";
+import React, { useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { toast } from 'sonner';
+import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode';
 
-const ScannerComponent: React.FC = () => {
-  const startBarcodeScan = async () => {
-    // Executa apenas em Android/iOS
-    if (!isPlatform('android') && !isPlatform('ios')) {
-      simulateBarcodeScan(); // fallback no navegador
-      return;
+export const BarcodeDialog = () => {
+  useEffect(() => {
+    const platform = Capacitor.getPlatform();
+
+    if (platform !== 'web') {
+      toast.info(`Rodando na plataforma: ${platform}`);
     }
 
-    try {
-      // Importação dinâmica segura
-      const { BarcodeScanner } = await import('@capacitor-community/barcode-scanner');
+    const scanner = new Html5QrcodeScanner(
+      'reader',
+      {
+        fps: 10,
+        qrbox: 250,
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+      },
+      false
+    );
 
-      // Solicita permissão (force = true abre popup se necessário)
-      const permission = await BarcodeScanner.checkPermission({ force: true });
-      if (!permission.granted) {
-        toast.error('Permissão não concedida.');
-        return;
+    scanner.render(
+      (decodedText, decodedResult) => {
+        console.log('Código lido:', decodedText);
+        toast.success(`Código: ${decodedText}`);
+        scanner.clear();
+      },
+      (errorMessage) => {
+        console.warn('Erro ao escanear', errorMessage);
       }
+    );
 
-      // Inicia o escaneamento
-      const result = await BarcodeScanner.startScan();
-      if (result.hasContent) {
-        console.log("Código escaneado:", result.content);
-        toast.success(`Código escaneado: ${result.content}`);
-      } else {
-        toast.info("Nenhum conteúdo detectado.");
-      }
-    } catch (error) {
-      console.error("Erro ao escanear:", error);
-      toast.error("Erro ao escanear o código.");
-    }
-  };
+    return () => {
+      scanner.clear().catch((err) => {
+        console.error('Erro ao limpar scanner:', err);
+      });
+    };
+  }, []);
 
-  // Simulação no navegador
-  const simulateBarcodeScan = () => {
-    const input = prompt("Digite manualmente o código de barras:");
-    if (input) {
-      console.log("Código simulado:", input);
-      toast.success(`Código simulado: ${input}`);
-    }
-  };
-
-  return (
-    <div>
-      <h2>Leitor de Código de Barras</h2>
-      <button onClick={startBarcodeScan}>Escanear</button>
-    </div>
-  );
+  return <div id="reader" style={{ width: '100%' }} />;
 };
-
-export default ScannerComponent;
