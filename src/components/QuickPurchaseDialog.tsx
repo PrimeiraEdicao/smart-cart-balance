@@ -1,16 +1,17 @@
 // src/components/QuickPurchaseDialog.tsx
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Html5QrcodeScanner } from "html5-qrcode";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Camera, CheckCircle } from "lucide-react";
+import { Camera, CheckCircle, Search, Loader2 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { isPlatform } from "@capacitor/core";
 import { toast } from "sonner";
@@ -24,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ListItem } from "@/types/shopping";
 
 interface QuickPurchaseDialogProps {
   open: boolean;
@@ -33,6 +35,7 @@ interface QuickPurchaseDialogProps {
 export const QuickPurchaseDialog = ({ open, onOpenChange }: QuickPurchaseDialogProps) => {
   const { addItem } = useAppContext();
 
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [detectedProduct, setDetectedProduct] = useState("");
@@ -40,14 +43,18 @@ export const QuickPurchaseDialog = ({ open, onOpenChange }: QuickPurchaseDialogP
   const [price, setPrice] = useState("");
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
   const [permissionError, setPermissionError] = useState("");
-
+  
+  // Lista de produtos mock para simulação no navegador
   const mockProducts = [
     "Coca-Cola 2L", "Biscoito Recheado", "Sabonete Dove", "Shampoo Clear",
     "Macarrão Barilla", "Molho de Tomate", "Queijo Mussarela", "Presunto Fatiado"
   ];
 
+  // Simulação de escaneamento para ambientes sem câmera (fallback)
   const simulateBarcodeScan = () => {
-    const mockBarcode = prompt("Simulação: Digite um código de barras");
+    // Usamos um mock que simula o prompt para evitar o uso de alert() ou prompt() na UI real
+    console.log("Simulação: Use o console para ver a simulação de escaneamento.");
+    const mockBarcode = "7891000053508";
     if (mockBarcode) {
       setScanning(true);
       setTimeout(() => {
@@ -62,66 +69,111 @@ export const QuickPurchaseDialog = ({ open, onOpenChange }: QuickPurchaseDialogP
     }
   };
 
-  const startBarcodeScan = async () => {
-    try {
-      setScanning(true);
+  // Inicia o scanner web usando html5-qrcode
+  const startWebcamScan = () => {
+    // Configura o scanner
+    const config = {
+      fps: 10,
+      qrbox: { width: 250, height: 250 },
+      supportedScanTypes: [
+        Html5QrcodeScanner.SCAN_TYPE.SCAN_TYPE_CAMERA,
+      ],
+    };
 
-      const { BarcodeScanner } = await import("@capacitor/barcode-scanner");
+    // Cria uma nova instância do scanner e a armazena na ref
+    const html5QrcodeScanner = new Html5QrcodeScanner("reader-container", config, false);
+    scannerRef.current = html5QrcodeScanner;
 
-      const checkPermission = await BarcodeScanner.checkPermission({ force: true });
-      if (!checkPermission.granted) {
-        setPermissionError("Permissão da câmera é necessária para escanear.");
-        setShowPermissionDialog(true);
-        return;
-      }
-
-      const result = await BarcodeScanner.startScan();
-      if (result.hasContent) {
-        const scannedBarcode = result.content;
-        const foundProduct = `Produto: ${scannedBarcode}`;
-        setDetectedProduct(foundProduct);
-        setScanned(true);
-      } else {
-        toast.info("Escaneamento cancelado.");
-        handleClose();
-      }
-    } catch (error) {
-      console.error("Erro ao escanear:", error);
-      toast.error("Erro ao iniciar o scanner.");
-    } finally {
+    // Define o callback de sucesso
+    const onScanSuccess = (decodedText: string) => {
+      setDetectedProduct(`Produto: ${decodedText}`);
+      setScanned(true);
       setScanning(false);
-    }
-  };
+      // Para o scanner após o sucesso
+      if (scannerRef.current) {
+        scannerRef.current.stop().catch(err => console.error(err));
+      }
+    };
 
-  const handleStartScanClick = () => {
+    // Define o callback de erro
+    const onScanError = (errorMessage: string) => {
+      // Mensagens de erro são comuns, não mostramos toasts para cada uma
+      console.warn(`Erro no escaneamento: ${errorMessage}`);
+    };
+
+    // Inicia o render do scanner
+    html5QrcodeScanner.render(onScanSuccess, onScanError);
+    setScanning(true);
+  };
+  
+  // Lógica para iniciar o escaneamento
+  const handleStartScanClick = async () => {
+    // Se for Android ou iOS, use o plugin nativo do Capacitor
     if (isPlatform("android") || isPlatform("ios")) {
-      startBarcodeScan();
+      try {
+        setScanning(true);
+        const { BarcodeScanner } = await import("@capacitor/barcode-scanner");
+        
+        // Verifica permissões
+        const checkPermission = await BarcodeScanner.checkPermission({ force: true });
+        if (!checkPermission.granted) {
+          setPermissionError("Permissão da câmera é necessária para escanear.");
+          setShowPermissionDialog(true);
+          return;
+        }
+
+        // Inicia o scan
+        const result = await BarcodeScanner.startScan();
+        if (result.hasContent) {
+          setDetectedProduct(`Produto: ${result.content}`);
+          setScanned(true);
+        } else {
+          toast.info("Escaneamento cancelado.");
+          handleClose();
+        }
+      } catch (error) {
+        console.error("Erro ao escanear com Capacitor:", error);
+        toast.error("Erro ao iniciar o scanner nativo.");
+      } finally {
+        setScanning(false);
+      }
     } else {
-      simulateBarcodeScan();
+      // Para o navegador, use o scanner web
+      startWebcamScan();
     }
   };
 
+  // Lógica para adicionar o item à lista
   const handleComplete = () => {
     if (detectedProduct && quantity && price) {
-      addItem({
+      const newItem: Partial<ListItem> = {
         name: detectedProduct,
         quantity: parseInt(quantity),
         price: parseFloat(price),
         purchased: true,
         purchaseDate: new Date().toISOString(),
-      });
+      };
+      addItem(newItem);
       handleClose();
     }
   };
 
+  // Lógica para fechar o diálogo e parar o scanner
   const handleClose = async () => {
-    if (scanning && (isPlatform("android") || isPlatform("ios"))) {
+    // Para o scanner do Capacitor, se estiver ativo
+    if (isPlatform("android") || isPlatform("ios")) {
       try {
         const { BarcodeScanner } = await import("@capacitor/barcode-scanner");
         await BarcodeScanner.stopScan();
       } catch (err) {
-        console.warn("Erro ao parar escaneamento:", err);
+        console.warn("Erro ao parar escaneamento do Capacitor:", err);
       }
+    }
+    
+    // Para o scanner web, se estiver ativo
+    if (scannerRef.current) {
+      await scannerRef.current.stop().catch(() => {});
+      scannerRef.current = null;
     }
 
     onOpenChange(false);
@@ -132,14 +184,12 @@ export const QuickPurchaseDialog = ({ open, onOpenChange }: QuickPurchaseDialogP
     setPrice("");
   };
 
+  // Efeito para parar o scanner quando o diálogo é fechado
   useEffect(() => {
-    if (!open && scanning && (isPlatform("android") || isPlatform("ios"))) {
-      import("@capacitor/barcode-scanner").then(({ BarcodeScanner }) => {
-        BarcodeScanner.stopScan().catch(() => {});
-        setScanning(false);
-      });
+    if (!open) {
+      handleClose();
     }
-  }, [open, scanning]);
+  }, [open]);
 
   return (
     <>
@@ -167,13 +217,13 @@ export const QuickPurchaseDialog = ({ open, onOpenChange }: QuickPurchaseDialogP
           <div className="space-y-4">
             {!scanned && !scanning && (
               <div className="text-center">
-                <div className="bg-gray-100 rounded-lg p-8 mb-4">
-                  <Camera className="h-12 w-12 text-gray-400 mx-auto" />
-                  <p className="text-sm text-gray-600 mt-2">
-                    Posicione o código de barras do produto
-                  </p>
-                </div>
-                <Button onClick={handleStartScanClick} className="w-full bg-green-600 hover:bg-green-700">
+                {/* O contêiner onde o scanner da webcam será renderizado */}
+                <div id="reader-container" style={{ width: "100%", aspectRatio: "16 / 9" }} className="mb-4"></div>
+                
+                <p className="text-sm text-gray-600 mt-2">
+                  Posicione o código de barras do produto
+                </p>
+                <Button onClick={handleStartScanClick} className="w-full bg-green-600 hover:bg-green-700 mt-4">
                   <Camera className="h-4 w-4 mr-2" />
                   Escanear Produto
                 </Button>
